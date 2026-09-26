@@ -173,10 +173,30 @@ function handleATVVideoDecrypt(videoId, res) {
     try {
       var raw = JSON.parse(result.body.toString());
       var data = Array.isArray(raw) ? raw[0] : raw;
-      var encField = data && data.mS9wR2qY7pK7vX5n;
+
+      if (!data || typeof data !== 'object') {
+        sendJSON(res, 404, { error: true, message: 'Empty response from ATV API' });
+        return;
+      }
+
+      // Try known field name first, then auto-detect encrypted field
+      var encField = data.mS9wR2qY7pK7vX5n || null;
+      if (!encField) {
+        var keys = Object.keys(data);
+        console.log('[ATV-Video] Available fields:', keys.join(', '));
+        for (var i = 0; i < keys.length; i++) {
+          var val = data[keys[i]];
+          if (typeof val === 'string' && val.length > 100 && /^[A-Za-z0-9+/=]+$/.test(val.substring(36, 100))) {
+            encField = val;
+            console.log('[ATV-Video] Auto-detected encrypted field:', keys[i]);
+            break;
+          }
+        }
+      }
 
       if (!encField) {
-        sendJSON(res, 404, { error: true, message: 'Video field not found in response' });
+        console.log('[ATV-Video] No encrypted field found. Response keys:', Object.keys(data).join(', '));
+        sendJSON(res, 404, { error: true, message: 'Video field not found', fields: Object.keys(data) });
         return;
       }
 
@@ -424,6 +444,15 @@ var server = http.createServer(function(req, res) {
           var raw = JSON.parse(result.body.toString());
           var data = Array.isArray(raw) ? raw[0] : raw;
           var encField = data && data.mS9wR2qY7pK7vX5n;
+          if (!encField && data && typeof data === 'object') {
+            var ks = Object.keys(data);
+            for (var ki = 0; ki < ks.length; ki++) {
+              var v = data[ks[ki]];
+              if (typeof v === 'string' && v.length > 100 && /^[A-Za-z0-9+/=]+$/.test(v.substring(36, 100))) {
+                encField = v; break;
+              }
+            }
+          }
           if (encField) {
             var videoUrl = decryptATVVideo(encField);
             if (videoUrl) {
