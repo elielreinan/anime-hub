@@ -368,7 +368,8 @@ var server = http.createServer(function(req, res) {
   var pathname = urlObj.pathname;
 
   // CORS headers for all responses
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  var origin = req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }

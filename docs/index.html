@@ -463,7 +463,7 @@
     var ATV_IMG = 'https://cdn.atv2.net/img/';
 
     function atvFetch(endpoint) {
-      return fetch('/api/atv/' + endpoint).then(function(r) { return r.json(); });
+      return fetch(getApiBase() + '/api/atv/' + endpoint).then(function(r) { return r.json(); });
     }
 
     function getTitle(m) { return m.category_name || m.title || 'Sem título'; }
@@ -489,6 +489,21 @@
         kitsuCache[clean] = { cover: '', poster: '' };
         return kitsuCache[clean];
       }).catch(function() { return { cover: '', poster: '' }; });
+    }
+
+    // ── Client-side Content Filter ──
+    var BLOCKED_WORDS = ['hentai','ecchi','erotica','yaoi','yuri','nudity','sexual','adult','r-18','r18','xxx','sukebe'];
+    function isBlockedItem(item) {
+      if (!item || typeof item !== 'object') return false;
+      var text = [item.category_name||'', item.title||'', item.category_genres||'', item.category_description||''].join(' ').toLowerCase();
+      for (var i = 0; i < BLOCKED_WORDS.length; i++) {
+        if (text.indexOf(BLOCKED_WORDS[i]) !== -1) return true;
+      }
+      return false;
+    }
+    function filterItems(arr) {
+      if (!Array.isArray(arr)) return arr;
+      return arr.filter(function(item) { return !isBlockedItem(item); });
     }
 
     // ── LocalStorage ──
@@ -674,10 +689,10 @@
       atvFetch('categoria=dublado'),
       atvFetch('calendario')
     ]).then(function(results) {
-      var latest = results[0] || [];
-      var populares = results[1] || [];
-      var dublados = results[2] || [];
-      var calendario = results[3] || [];
+      var latest = filterItems(results[0] || []);
+      var populares = filterItems(results[1] || []);
+      var dublados = filterItems(results[2] || []);
+      var calendario = filterItems(results[3] || []);
 
       // For hero, fetch info of first 5 populares to get descriptions
       var heroIds = populares.slice(0, HERO_COUNT);
@@ -747,8 +762,9 @@
 
       var endpoint = q ? 'search=' + encodeURIComponent(q) : 'populares';
 
-      atvFetch(endpoint).then(function(data) {
+      atvFetch(endpoint).then(function(raw) {
         document.getElementById('search-loading').style.display = 'none';
+        var data = filterItems(raw);
         if (!Array.isArray(data) || data.length === 0) {
           document.getElementById('search-results').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Nenhum anime encontrado</div>';
           return;
@@ -786,12 +802,23 @@
 
         currentAnime = info;
         currentAnimeEpisodes = episodes;
-        var banner = getCover(info);
+        var fallbackImg = getCover(info);
 
         document.getElementById('detail-banner').innerHTML =
           '<button class="detail-back" onclick="closeDetail()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>' +
-          '<img src="' + banner + '" alt="">' +
+          '<img id="detail-banner-img" src="' + fallbackImg + '" alt="">' +
           '<div class="detail-banner-gradient"></div>';
+
+        fetchKitsuImages(getTitle(info)).then(function(imgs) {
+          if (imgs.cover) {
+            var bannerEl = document.getElementById('detail-banner-img');
+            if (bannerEl) bannerEl.src = imgs.cover;
+          }
+          if (imgs.poster) {
+            var posterEl = document.getElementById('detail-poster-img');
+            if (posterEl) posterEl.src = imgs.poster;
+          }
+        });
 
         var genresArr = (info.category_genres || '').split(',').map(function(g) { return g.trim(); }).filter(Boolean);
         var subInfo = [info.ano || '', episodes.length + ' episódios'].filter(Boolean).join(' • ');
@@ -801,7 +828,7 @@
         var isPlan = isInList('Quero Assistir', info.id);
 
         var body = '<div class="detail-meta">' +
-          '<div class="detail-poster"><img src="' + getCover(info) + '" alt=""></div>' +
+          '<div class="detail-poster"><img id="detail-poster-img" src="' + getCover(info) + '" alt=""></div>' +
           '<div class="detail-info">' +
             '<div class="detail-title">' + getTitle(info) + '</div>' +
             '<div class="detail-sub">' + subInfo + '</div>' +
@@ -892,8 +919,8 @@
     }
 
     function getApiBase() {
-      if (location.port === '3000' && location.hostname === 'localhost') return '';
-      return '';
+      if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') return '';
+      return 'https://anime-hub-api.onrender.com';
     }
 
     function openPlayer(animeId, ep, totalEps, videoId) {
@@ -1136,7 +1163,8 @@
 
       document.getElementById('ranking-list').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Carregando ranking...</div>';
 
-      atvFetch('populares').then(function(data) {
+      atvFetch('populares').then(function(raw) {
+        var data = filterItems(raw);
         if (!Array.isArray(data)) data = [];
         var media = data.slice(0, 20);
         document.getElementById('ranking-list').innerHTML = media.map(function(m, i) {
@@ -1302,6 +1330,19 @@
       document.getElementById('community-feed').style.display = tab === 'feed' ? 'block' : 'none';
       document.getElementById('community-clans').style.display = tab === 'clans' ? 'block' : 'none';
     }
+
+    // ── Offline UX ──
+    var offlineBanner = document.createElement('div');
+    offlineBanner.id = 'offline-banner';
+    offlineBanner.style.cssText = 'display:none;position:fixed;top:0;left:0;width:100%;padding:8px;background:#ef4444;color:#fff;text-align:center;font-size:13px;font-weight:600;z-index:999';
+    offlineBanner.textContent = 'Sem conexão — modo offline';
+    document.body.appendChild(offlineBanner);
+    function updateOnlineStatus() {
+      offlineBanner.style.display = navigator.onLine ? 'none' : 'block';
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
 
     // ── Service Worker ──
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function() {});

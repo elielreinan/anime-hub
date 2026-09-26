@@ -1,5 +1,5 @@
-var CACHE = 'animehub-v3';
-var PRECACHE = ['/', '/index.html', '/manifest.json'];
+var CACHE = 'animehub-v4';
+var PRECACHE = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
@@ -19,19 +19,27 @@ self.addEventListener('activate', function(e) {
 
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.includes('atv2.net')) {
+
+  // API calls: network first, cache fallback
+  if (e.request.url.includes('/api/')) {
     e.respondWith(
       fetch(e.request).then(function(r) {
         var clone = r.clone();
         caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
         return r;
       }).catch(function() {
-        return caches.match(e.request);
+        return caches.match(e.request).then(function(cached) {
+          return cached || new Response(JSON.stringify({ error: true, message: 'offline' }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        });
       })
     );
     return;
   }
-  if (e.request.url.match(/\.(png|jpg|jpeg|webp|gif)$/i) || e.request.url.includes('cdn.atv2.net')) {
+
+  // Images: cache first
+  if (e.request.url.match(/\.(png|jpg|jpeg|webp|gif)$/i) || e.request.url.includes('cdn.atv2.net') || e.request.url.includes('kitsu')) {
     e.respondWith(
       caches.match(e.request).then(function(cached) {
         if (cached) return cached;
@@ -39,14 +47,20 @@ self.addEventListener('fetch', function(e) {
           var clone = r.clone();
           caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
           return r;
+        }).catch(function() {
+          return new Response('', { status: 404 });
         });
       })
     );
     return;
   }
+
+  // Everything else: cache first, network fallback
   e.respondWith(
     caches.match(e.request).then(function(cached) {
       return cached || fetch(e.request);
+    }).catch(function() {
+      return caches.match('/index.html');
     })
   );
 });
