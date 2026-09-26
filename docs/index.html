@@ -470,6 +470,27 @@
     function getCover(m) { return m.category_image ? ATV_IMG + m.category_image : ''; }
     function cleanDesc(d) { return d ? d.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').trim() : ''; }
 
+    var kitsuCache = {};
+    function fetchKitsuImages(title) {
+      var clean = title.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+(Dublado|Legendado|PT-PT|PT-BR)\s*/gi, '').trim();
+      if (kitsuCache[clean]) return Promise.resolve(kitsuCache[clean]);
+      return fetch('https://kitsu.app/api/edge/anime?filter[text]=' + encodeURIComponent(clean) + '&page[limit]=1', {
+        headers: { 'Accept': 'application/vnd.api+json' }
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (data.data && data.data.length > 0) {
+          var attrs = data.data[0].attributes;
+          var result = {
+            cover: (attrs.coverImage && (attrs.coverImage.large || attrs.coverImage.original)) || '',
+            poster: (attrs.posterImage && (attrs.posterImage.large || attrs.posterImage.original)) || ''
+          };
+          kitsuCache[clean] = result;
+          return result;
+        }
+        kitsuCache[clean] = { cover: '', poster: '' };
+        return kitsuCache[clean];
+      }).catch(function() { return { cover: '', poster: '' }; });
+    }
+
     // ── LocalStorage ──
     function getStore(key) { try { return JSON.parse(localStorage.getItem('ah_' + key)) || {}; } catch(e) { return {}; } }
     function setStore(key, val) { try { localStorage.setItem('ah_' + key, JSON.stringify(val)); } catch(e) {} }
@@ -564,14 +585,15 @@
       heroAnimes = animes.slice(0, HERO_COUNT);
       var slidesEl = document.getElementById('hero-slides');
       var dotsEl = document.getElementById('hero-dots');
+
       slidesEl.innerHTML = heroAnimes.map(function(m, idx) {
-        var heroImg = getCover(m);
+        var fallbackImg = getCover(m);
         var desc = cleanDesc(m.category_description || '').slice(0, 120);
         if (desc) desc += '...';
         var tags = (m.category_genres || '').split(',').slice(0, 4).map(function(g) { return g.trim(); }).filter(Boolean).map(function(g) { return '<span class="tag">' + g + '</span>'; }).join('');
         var aid = m.id || m.category_id;
         return '<div class="hero-slide">' +
-          '<img class="hero-img" src="' + heroImg + '" alt="' + getTitle(m) + '">' +
+          '<img class="hero-img" id="hero-img-' + idx + '" src="' + fallbackImg + '" alt="' + getTitle(m) + '">' +
           '<div class="hero-gradient"></div>' +
           '<div class="hero-content">' +
             '<h2 class="hero-title">' + getTitle(m) + '</h2>' +
@@ -587,6 +609,15 @@
       dotsEl.innerHTML = heroAnimes.map(function(_, i) {
         return '<button class="hero-dot' + (i === 0 ? ' active' : '') + '" onclick="goToHeroSlide(' + i + ')"></button>';
       }).join('');
+
+      heroAnimes.forEach(function(m, idx) {
+        fetchKitsuImages(getTitle(m)).then(function(imgs) {
+          var heroEl = document.getElementById('hero-img-' + idx);
+          if (heroEl && (imgs.cover || imgs.poster)) {
+            heroEl.src = imgs.cover || imgs.poster;
+          }
+        });
+      });
 
       startHeroCarousel();
     }
