@@ -254,6 +254,12 @@
     .skeleton-card { width: 120px; flex-shrink: 0; }
     .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--card); color: #fff; padding: 12px 24px; border-radius: 12px; border: 1px solid var(--accent); font-size: 14px; font-weight: 600; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     .toast.show { opacity: 1; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .player-sources { position: absolute; top: 50px; right: 16px; z-index: 20; background: rgba(0,0,0,0.9); border: 1px solid #333; border-radius: 10px; padding: 8px; display: none; }
+    .player-sources.show { display: block; }
+    .player-source-item { padding: 8px 16px; color: #fff; font-size: 13px; cursor: pointer; border-radius: 6px; white-space: nowrap; }
+    .player-source-item:hover, .player-source-item.active { background: var(--accent); }
+    .player-quality-btn { background: rgba(255,255,255,0.1); border: 1px solid #444; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; }
   </style>
 </head>
 <body>
@@ -396,11 +402,12 @@
       <div class="player-ep-info" id="player-ep-info"></div>
       <div style="width:40px"></div>
     </div>
-    <div class="player-body">
-      <div class="player-placeholder">
+    <div class="player-body" id="player-body">
+      <video id="player-video" style="width:100%;height:100%;background:#000;display:none" playsinline></video>
+      <div class="player-placeholder" id="player-placeholder">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-        <p>Player em desenvolvimento</p>
-        <p style="font-size:12px;margin-top:4px">Streaming será adicionado em breve</p>
+        <p id="player-status">Buscando episódio...</p>
+        <div id="player-spinner" style="margin-top:12px;width:32px;height:32px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;display:none"></div>
       </div>
     </div>
     <div class="player-controls">
@@ -841,75 +848,170 @@
     var playerAnimeId = null;
     var playerEpisode = 0;
     var playerTotalEps = 0;
-    var playerProgress = 0;
     var playerPlaying = false;
-    var playerTimer = null;
     var skipShown = false;
+    var videoEl = null;
+    var playerHasVideo = false;
+
+    function slugify(title) {
+      return title.toLowerCase()
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .replace(/\s+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '');
+    }
+
+    function getApiBase() {
+      if (location.port === '3000' && location.hostname === 'localhost') return '';
+      return '';
+    }
 
     function openPlayer(animeId, ep, totalEps) {
       playerAnimeId = animeId;
       playerEpisode = ep;
       playerTotalEps = totalEps;
-      playerProgress = 0;
       playerPlaying = false;
       skipShown = false;
+      playerHasVideo = false;
 
-      var history = getWatchHistory();
-      var entry = history.find(function(h) { return h.id === animeId && h.episode === ep; });
-      if (entry && entry.progress < 100) playerProgress = entry.progress;
+      videoEl = document.getElementById('player-video');
+      videoEl.style.display = 'none';
+      videoEl.pause();
+      videoEl.removeAttribute('src');
+      document.getElementById('player-placeholder').style.display = 'flex';
+      document.getElementById('player-status').textContent = 'Buscando episódio...';
+      document.getElementById('player-spinner').style.display = 'block';
 
       document.getElementById('player-ep-info').textContent = (currentAnime ? getTitle(currentAnime) : 'Anime') + ' — Ep ' + ep;
-      document.getElementById('player-progress-fill').style.width = playerProgress + '%';
+      document.getElementById('player-progress-fill').style.width = '0%';
       document.getElementById('skip-opening-btn').classList.remove('show');
       document.getElementById('player-overlay').classList.add('show');
 
-      togglePlay();
+      var title = currentAnime ? (currentAnime.title.romaji || currentAnime.title.english || '') : '';
+      var slug = slugify(title);
+
+      fetchEpisodeVideo(slug, ep);
+    }
+
+    function fetchEpisodeVideo(slug, ep) {
+      var apiUrl = getApiBase() + '/api/episode/' + encodeURIComponent(slug) + '/' + ep;
+      fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.error && data.video_url) {
+          loadVideo(data.video_url, data.sources || []);
+        } else {
+          var altSlugs = [slug + '-legendado', slug + '-todos-os-episodios', slug + '-dublado'];
+          tryAltSlugs(altSlugs, ep, 0);
+        }
+      }).catch(function() {
+        document.getElementById('player-spinner').style.display = 'none';
+        document.getElementById('player-status').textContent = 'Servidor offline. Inicie: node server.js';
+      });
+    }
+
+    function tryAltSlugs(slugs, ep, idx) {
+      if (idx >= slugs.length) {
+        document.getElementById('player-spinner').style.display = 'none';
+        document.getElementById('player-status').textContent = 'Episódio não encontrado neste provider';
+        return;
+      }
+      var apiUrl = getApiBase() + '/api/episode/' + encodeURIComponent(slugs[idx]) + '/' + ep;
+      fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
+        if (!data.error && data.video_url) {
+          loadVideo(data.video_url, data.sources || []);
+        } else {
+          tryAltSlugs(slugs, ep, idx + 1);
+        }
+      }).catch(function() { tryAltSlugs(slugs, ep, idx + 1); });
+    }
+
+    function loadVideo(videoUrl, sources) {
+      playerHasVideo = true;
+      var proxyUrl = getApiBase() + '/api/proxy?url=' + encodeURIComponent(videoUrl);
+      videoEl = document.getElementById('player-video');
+      videoEl.src = proxyUrl;
+      videoEl.style.display = 'block';
+      document.getElementById('player-placeholder').style.display = 'none';
+
+      videoEl.play().catch(function() {});
+      playerPlaying = true;
+      updatePlayPauseBtn();
+
+      videoEl.ontimeupdate = function() {
+        if (videoEl.duration) {
+          var pct = (videoEl.currentTime / videoEl.duration) * 100;
+          document.getElementById('player-progress-fill').style.width = pct + '%';
+
+          if (videoEl.currentTime > 30 && videoEl.currentTime < 120 && !skipShown) {
+            skipShown = true;
+            document.getElementById('skip-opening-btn').classList.add('show');
+            setTimeout(function() { document.getElementById('skip-opening-btn').classList.remove('show'); }, 5000);
+          }
+        }
+      };
+
+      videoEl.onended = function() {
+        playerPlaying = false;
+        updatePlayPauseBtn();
+        if (currentAnime) {
+          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, 100, playerTotalEps);
+        }
+        showToast('Episódio concluído!');
+      };
+
+      videoEl.onerror = function() {
+        videoEl.style.display = 'none';
+        document.getElementById('player-placeholder').style.display = 'flex';
+        document.getElementById('player-spinner').style.display = 'none';
+        document.getElementById('player-status').textContent = 'Erro ao carregar vídeo';
+        playerHasVideo = false;
+      };
+    }
+
+    function updatePlayPauseBtn() {
+      var btn = document.getElementById('play-pause-btn');
+      if (playerPlaying) {
+        btn.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+      } else {
+        btn.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+      }
     }
 
     function closePlayer() {
+      videoEl = document.getElementById('player-video');
+      var progress = 0;
+      if (playerHasVideo && videoEl.duration) {
+        progress = (videoEl.currentTime / videoEl.duration) * 100;
+      }
+      videoEl.pause();
       playerPlaying = false;
-      clearInterval(playerTimer);
       document.getElementById('player-overlay').classList.remove('show');
 
-      if (currentAnime && playerProgress > 0) {
-        saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, playerProgress, playerTotalEps);
+      if (currentAnime && progress > 0) {
+        saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, progress, playerTotalEps);
         renderContinueWatching();
       }
     }
 
     function togglePlay() {
-      playerPlaying = !playerPlaying;
-      var btn = document.getElementById('play-pause-btn');
-      if (playerPlaying) {
-        btn.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
-        playerTimer = setInterval(function() {
-          playerProgress += 0.5;
-          if (playerProgress >= 100) {
-            playerProgress = 100;
-            clearInterval(playerTimer);
-            playerPlaying = false;
-            btn.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-            if (currentAnime) {
-              saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, 100, playerTotalEps);
-            }
-            showToast('Episódio concluído!');
-          }
-          document.getElementById('player-progress-fill').style.width = playerProgress + '%';
-          if (playerProgress >= 3 && playerProgress <= 12 && !skipShown) {
-            skipShown = true;
-            document.getElementById('skip-opening-btn').classList.add('show');
-            setTimeout(function() { document.getElementById('skip-opening-btn').classList.remove('show'); }, 5000);
-          }
-        }, 200);
-      } else {
-        btn.innerHTML = '<svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-        clearInterval(playerTimer);
+      videoEl = document.getElementById('player-video');
+      if (playerHasVideo) {
+        if (videoEl.paused) {
+          videoEl.play().catch(function() {});
+          playerPlaying = true;
+        } else {
+          videoEl.pause();
+          playerPlaying = false;
+        }
+        updatePlayPauseBtn();
       }
     }
 
     function skipOpening() {
-      playerProgress = Math.min(100, playerProgress + 8);
-      document.getElementById('player-progress-fill').style.width = playerProgress + '%';
+      videoEl = document.getElementById('player-video');
+      if (playerHasVideo && videoEl.duration) {
+        videoEl.currentTime = Math.min(videoEl.duration, videoEl.currentTime + 85);
+      }
       document.getElementById('skip-opening-btn').classList.remove('show');
       showToast('Abertura pulada!');
     }
@@ -918,16 +1020,23 @@
       var bar = document.getElementById('player-progress');
       var rect = bar.getBoundingClientRect();
       var pct = ((e.clientX - rect.left) / rect.width) * 100;
-      playerProgress = Math.max(0, Math.min(100, pct));
-      document.getElementById('player-progress-fill').style.width = playerProgress + '%';
+      pct = Math.max(0, Math.min(100, pct));
+      document.getElementById('player-progress-fill').style.width = pct + '%';
+      videoEl = document.getElementById('player-video');
+      if (playerHasVideo && videoEl.duration) {
+        videoEl.currentTime = (pct / 100) * videoEl.duration;
+      }
     }
 
     function nextEpisode() {
       if (playerEpisode < playerTotalEps) {
+        videoEl = document.getElementById('player-video');
+        var progress = 0;
+        if (playerHasVideo && videoEl.duration) progress = (videoEl.currentTime / videoEl.duration) * 100;
         if (currentAnime) {
-          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, playerProgress, playerTotalEps);
+          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, progress, playerTotalEps);
         }
-        clearInterval(playerTimer);
+        videoEl.pause();
         playerPlaying = false;
         openPlayer(playerAnimeId, playerEpisode + 1, playerTotalEps);
       } else {
@@ -937,7 +1046,8 @@
 
     function prevEpisode() {
       if (playerEpisode > 1) {
-        clearInterval(playerTimer);
+        videoEl = document.getElementById('player-video');
+        videoEl.pause();
         playerPlaying = false;
         openPlayer(playerAnimeId, playerEpisode - 1, playerTotalEps);
       } else {
