@@ -289,10 +289,10 @@
         <div class="section-header"><h2 class="section-title">Continuar Assistindo</h2></div>
         <div class="carousel" id="continue-watching"></div>
       </section>
-      <section class="section"><div class="section-header"><h2 class="section-title">Em Alta</h2></div><div class="carousel" id="trending"></div></section>
+      <section class="section"><div class="section-header"><h2 class="section-title">Lançamentos</h2></div><div class="carousel" id="trending"></div></section>
       <section class="section"><div class="section-header"><h2 class="section-title">Populares</h2></div><div class="carousel" id="popular"></div></section>
-      <section class="section"><div class="section-header"><h2 class="section-title">Lançamentos da Temporada</h2></div><div class="carousel" id="seasonal"></div></section>
-      <section class="section"><div class="section-header"><h2 class="section-title">Mais Bem Avaliados</h2></div><div class="carousel" id="top-rated"></div></section>
+      <section class="section"><div class="section-header"><h2 class="section-title">Dublados</h2></div><div class="carousel" id="seasonal"></div></section>
+      <section class="section"><div class="section-header"><h2 class="section-title">Destaques</h2></div><div class="carousel" id="top-rated"></div></section>
     </div>
     <div class="footer"><span>Codado por </span><a href="https://instagram.com" target="_blank">2E</a></div>
   </div>
@@ -403,7 +403,8 @@
       <div style="width:40px"></div>
     </div>
     <div class="player-body" id="player-body">
-      <video id="player-video" style="width:100%;height:100%;background:#000;display:none" playsinline></video>
+      <video id="player-video" style="width:100%;height:100%;background:#000;display:none" playsinline controls></video>
+      <iframe id="player-iframe" style="width:100%;height:100%;border:none;display:none" allowfullscreen></iframe>
       <div class="player-placeholder" id="player-placeholder">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         <p id="player-status">Buscando episódio...</p>
@@ -458,20 +459,15 @@
   </nav>
 
   <script>
-    // ── AniList GraphQL API ──
-    var API = 'https://graphql.anilist.co';
-    var MEDIA_FIELDS = 'id title { romaji english native } coverImage { extraLarge large medium } bannerImage description genres averageScore popularity favourites episodes status season seasonYear studios(isMain:true) { nodes { name } } nextAiringEpisode { episode timeUntilAiring }';
+    // ── AnimeTV API (atv2.net) via proxy ──
+    var ATV_IMG = 'https://cdn.atv2.net/img/';
 
-    function query(q, vars) {
-      return fetch(API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ query: q, variables: vars })
-      }).then(function(r) { return r.json(); });
+    function atvFetch(endpoint) {
+      return fetch('/api/atv/' + endpoint).then(function(r) { return r.json(); });
     }
 
-    function getTitle(m) { return m.title.romaji || m.title.english || m.title.native || 'Sem título'; }
-    function getCover(m) { return m.coverImage.extraLarge || m.coverImage.large || m.coverImage.medium; }
+    function getTitle(m) { return m.category_name || m.title || 'Sem título'; }
+    function getCover(m) { return m.category_image ? ATV_IMG + m.category_image : ''; }
     function cleanDesc(d) { return d ? d.replace(/<[^>]*>/g, '').replace(/\n/g, ' ').trim() : ''; }
 
     // ── LocalStorage ──
@@ -484,13 +480,14 @@
     function addToList(listName, anime) {
       var lists = getUserLists();
       if (!lists[listName]) lists[listName] = [];
-      if (!lists[listName].find(function(a) { return a.id === anime.id; })) {
-        lists[listName].push({ id: anime.id, title: getTitle(anime), cover: getCover(anime), score: anime.averageScore });
+      var aid = anime.id || anime.category_id;
+      if (!lists[listName].find(function(a) { return a.id === aid; })) {
+        lists[listName].push({ id: aid, title: getTitle(anime), cover: getCover(anime) });
         setUserLists(lists);
         renderProfileStats();
         showToast('Adicionado a ' + listName + '!');
       } else {
-        lists[listName] = lists[listName].filter(function(a) { return a.id !== anime.id; });
+        lists[listName] = lists[listName].filter(function(a) { return a.id !== aid; });
         setUserLists(lists);
         renderProfileStats();
         showToast('Removido de ' + listName);
@@ -499,7 +496,7 @@
 
     function isInList(listName, animeId) {
       var lists = getUserLists();
-      return lists[listName] && lists[listName].some(function(a) { return a.id === animeId; });
+      return lists[listName] && lists[listName].some(function(a) { return a.id == animeId; });
     }
 
     // ── Watch History (Continue Watching) ──
@@ -551,9 +548,9 @@
 
     // ── Poster Card ──
     function createPosterCard(m) {
-      var score = m.averageScore ? '<div class="poster-score"><svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' + (m.averageScore / 10).toFixed(1) + '</div>' : '';
-      return '<div class="poster-card" onclick="openDetail(' + m.id + ')">' +
-        '<div class="poster-img">' + score + '<img src="' + getCover(m) + '" alt="' + getTitle(m) + '" loading="lazy"></div>' +
+      var aid = m.id || m.category_id;
+      return '<div class="poster-card" onclick="openDetail(\'' + aid + '\')">' +
+        '<div class="poster-img"><img src="' + getCover(m) + '" alt="' + getTitle(m) + '" loading="lazy"></div>' +
         '<div class="poster-title">' + getTitle(m) + '</div></div>';
     }
 
@@ -567,11 +564,12 @@
       heroAnimes = animes.slice(0, HERO_COUNT);
       var slidesEl = document.getElementById('hero-slides');
       var dotsEl = document.getElementById('hero-dots');
-      slidesEl.innerHTML = heroAnimes.map(function(m) {
-        var heroImg = m.bannerImage || getCover(m);
-        var desc = cleanDesc(m.description).slice(0, 120);
+      slidesEl.innerHTML = heroAnimes.map(function(m, idx) {
+        var heroImg = getCover(m);
+        var desc = cleanDesc(m.category_description || '').slice(0, 120);
         if (desc) desc += '...';
-        var tags = (m.genres || []).slice(0, 4).map(function(g) { return '<span class="tag">' + g + '</span>'; }).join('');
+        var tags = (m.category_genres || '').split(',').slice(0, 4).map(function(g) { return g.trim(); }).filter(Boolean).map(function(g) { return '<span class="tag">' + g + '</span>'; }).join('');
+        var aid = m.id || m.category_id;
         return '<div class="hero-slide">' +
           '<img class="hero-img" src="' + heroImg + '" alt="' + getTitle(m) + '">' +
           '<div class="hero-gradient"></div>' +
@@ -580,8 +578,8 @@
             '<div class="hero-desc">' + desc + '</div>' +
             '<div class="hero-tags">' + tags + '</div>' +
             '<div class="hero-buttons">' +
-              '<button class="btn-primary" onclick="openDetail(' + m.id + ')"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>Detalhes</button>' +
-              '<button class="btn-secondary" onclick="addToList(\'Quero Assistir\',heroAnimes[' + heroAnimes.indexOf(m) + '])"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Minha Lista</button>' +
+              '<button class="btn-primary" onclick="openDetail(\'' + aid + '\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>Detalhes</button>' +
+              '<button class="btn-secondary" onclick="addToList(\'Quero Assistir\',heroAnimes[' + idx + '])"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Minha Lista</button>' +
             '</div>' +
           '</div></div>';
       }).join('');
@@ -631,43 +629,66 @@
       }, { passive: true });
     })();
 
-    // ── Fetch Home Data ──
-    var homeQuery = 'query($season:MediaSeason,$seasonYear:Int){trending:Page(perPage:15){media(type:ANIME,sort:TRENDING_DESC){' + MEDIA_FIELDS + '}} popular:Page(perPage:15){media(type:ANIME,sort:POPULARITY_DESC){' + MEDIA_FIELDS + '}} seasonal:Page(perPage:15){media(type:ANIME,season:$season,seasonYear:$seasonYear,sort:POPULARITY_DESC){' + MEDIA_FIELDS + '}} top:Page(perPage:15){media(type:ANIME,sort:SCORE_DESC){' + MEDIA_FIELDS + '}}}';
-
-    function getCurrentSeason() {
-      var m = new Date().getMonth();
-      var seasons = ['WINTER','WINTER','SPRING','SPRING','SPRING','SUMMER','SUMMER','SUMMER','FALL','FALL','FALL','WINTER'];
-      return { season: seasons[m], year: new Date().getFullYear() };
-    }
-
+    // ── Fetch Home Data (AnimeTV API) ──
     ['trending','popular','seasonal','top-rated'].forEach(function(id) {
       document.getElementById(id).innerHTML = skeletonCarousel();
     });
 
     renderContinueWatching();
 
-    var s = getCurrentSeason();
-    query(homeQuery, { season: s.season, seasonYear: s.year }).then(function(res) {
-      var d = res.data;
-      buildHeroSlides(d.trending.media);
-      document.getElementById('trending').innerHTML = d.trending.media.slice(HERO_COUNT).map(createPosterCard).join('');
-      document.getElementById('popular').innerHTML = d.popular.media.map(createPosterCard).join('');
-      document.getElementById('seasonal').innerHTML = d.seasonal.media.map(createPosterCard).join('');
-      document.getElementById('top-rated').innerHTML = d.top.media.map(createPosterCard).join('');
+    // Load latest + populares + categories in parallel
+    Promise.all([
+      atvFetch('latest'),
+      atvFetch('populares'),
+      atvFetch('categoria=dublado'),
+      atvFetch('calendario')
+    ]).then(function(results) {
+      var latest = results[0] || [];
+      var populares = results[1] || [];
+      var dublados = results[2] || [];
+      var calendario = results[3] || [];
+
+      // For hero, fetch info of first 5 populares to get descriptions
+      var heroIds = populares.slice(0, HERO_COUNT);
+      Promise.all(heroIds.map(function(a) {
+        return atvFetch('info=' + a.id).then(function(info) {
+          if (info && info[0]) {
+            a.category_description = info[0].category_description;
+            a.category_genres = info[0].category_genres;
+          }
+          return a;
+        }).catch(function() { return a; });
+      })).then(function(heroData) {
+        buildHeroSlides(heroData);
+      });
+
+      // Map latest episodes to anime cards (group by category_id, show unique)
+      var seen = {};
+      var latestAnimes = [];
+      latest.forEach(function(ep) {
+        if (!seen[ep.category_id]) {
+          seen[ep.category_id] = true;
+          latestAnimes.push({ id: ep.category_id, category_name: ep.title.replace(/ Episodio \d+$/i, '').replace(/ Episódio \d+$/i, ''), category_image: ep.category_image });
+        }
+      });
+
+      document.getElementById('trending').innerHTML = latestAnimes.slice(0, 15).map(createPosterCard).join('');
+      document.getElementById('popular').innerHTML = populares.slice(0, 15).map(createPosterCard).join('');
+      document.getElementById('seasonal').innerHTML = dublados.slice(0, 15).map(createPosterCard).join('');
+      document.getElementById('top-rated').innerHTML = populares.slice(15, 30).map(createPosterCard).join('');
     }).catch(function(e) {
-      console.error('AniList fetch error:', e);
+      console.error('AnimeTV fetch error:', e);
       ['trending','popular','seasonal','top-rated'].forEach(function(id) {
         document.getElementById(id).innerHTML = '<div style="padding:20px;color:var(--muted)">Erro ao carregar. Verifique sua conexão.</div>';
       });
     });
 
-    // ── Explore / Search ──
-    var genres = ['Action','Adventure','Comedy','Drama','Fantasy','Horror','Mecha','Music','Mystery','Psychological','Romance','Sci-Fi','Slice of Life','Sports','Supernatural','Thriller'];
-    var genrePT = {Action:'Ação',Adventure:'Aventura',Comedy:'Comédia',Drama:'Drama',Fantasy:'Fantasia',Horror:'Terror',Mecha:'Mecha',Music:'Música',Mystery:'Mistério',Psychological:'Psicológico',Romance:'Romance','Sci-Fi':'Sci-Fi','Slice of Life':'Slice of Life',Sports:'Esportes',Supernatural:'Sobrenatural',Thriller:'Suspense'};
+    // ── Explore / Search (AnimeTV API) ──
+    var genres = ['Ação','Aventura','Comédia','Drama','Fantasia','Terror','Mecha','Música','Mistério','Romance','Sci-Fi','Esportes','Sobrenatural','Suspense'];
 
     var gfHTML = '<button class="filter-chip active" onclick="searchGenre(this,null)">Todos</button>';
     genres.forEach(function(g) {
-      gfHTML += '<button class="filter-chip" onclick="searchGenre(this,\'' + g + '\')">' + (genrePT[g] || g) + '</button>';
+      gfHTML += '<button class="filter-chip" onclick="searchGenre(this,\'' + g + '\')">' + g + '</button>';
     });
     document.getElementById('genre-filters').innerHTML = gfHTML;
 
@@ -688,91 +709,71 @@
 
     function doSearch() {
       var q = searchInput.value.trim();
-      var sortVal = document.getElementById('sort-select').value;
-      var statusVal = document.getElementById('status-filter').value;
-      var vars = { page: 1, perPage: 30, type: 'ANIME', sort: q ? 'SEARCH_MATCH' : sortVal };
-      if (q) vars.search = q;
-      if (currentGenre) vars.genre = currentGenre;
-      if (statusVal) vars.status = statusVal;
-
-      var gql = 'query($page:Int,$perPage:Int,$type:MediaType,$sort:[MediaSort],$search:String,$genre:String,$status:MediaStatus){Page(page:$page,perPage:$perPage){media(type:$type,sort:$sort,search:$search,genre:$genre,status:$status){' + MEDIA_FIELDS + '}}}';
 
       document.getElementById('search-loading').style.display = 'block';
       document.getElementById('search-results').innerHTML = '';
       document.getElementById('explore-count').textContent = '';
 
-      query(gql, vars).then(function(res) {
-        document.getElementById('search-loading').style.display = 'none';
-        var media = res.data.Page.media;
-        document.getElementById('explore-count').textContent = media.length + ' resultados';
+      var endpoint = q ? 'search=' + encodeURIComponent(q) : 'populares';
 
-        if (media.length === 0) {
+      atvFetch(endpoint).then(function(data) {
+        document.getElementById('search-loading').style.display = 'none';
+        if (!Array.isArray(data) || data.length === 0) {
           document.getElementById('search-results').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Nenhum anime encontrado</div>';
           return;
         }
 
-        if (!q && !currentGenre && !statusVal) {
-          var grouped = {};
-          media.forEach(function(m) {
-            var cat = (m.genres && m.genres[0]) || 'Outros';
-            if (!grouped[cat]) grouped[cat] = [];
-            grouped[cat].push(m);
-          });
-
-          var html = '';
-          Object.keys(grouped).forEach(function(cat) {
-            html += '<div class="category-divider"><span class="category-divider-text">' + (genrePT[cat] || cat) + '</span><div class="category-divider-line"></div></div>';
-            html += '<div class="anime-grid" style="margin-bottom:8px">' + grouped[cat].map(createPosterCard).join('') + '</div>';
-          });
-          document.getElementById('search-results').innerHTML = html;
-        } else {
-          document.getElementById('search-results').innerHTML = '<div class="anime-grid">' + media.map(createPosterCard).join('') + '</div>';
-        }
+        document.getElementById('explore-count').textContent = data.length + ' resultados';
+        document.getElementById('search-results').innerHTML = '<div class="anime-grid">' + data.map(createPosterCard).join('') + '</div>';
+      }).catch(function() {
+        document.getElementById('search-loading').style.display = 'none';
+        document.getElementById('search-results').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Erro ao buscar</div>';
       });
     }
     doSearch();
 
-    // ── Detail Page ──
+    // ── Detail Page (AnimeTV API) ──
     var currentAnime = null;
+    var currentAnimeEpisodes = [];
 
     function openDetail(id) {
-      var gql = 'query($id:Int){Media(id:$id,type:ANIME){' + MEDIA_FIELDS + ' relations{edges{relationType node{id title{romaji}coverImage{large}type}}} recommendations(perPage:6){nodes{mediaRecommendation{' + MEDIA_FIELDS + '}}}}}';
-
       document.getElementById('detail-page').classList.add('show');
       document.getElementById('detail-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Carregando...</div>';
       document.getElementById('detail-banner').innerHTML = '<button class="detail-back" onclick="closeDetail()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button><div class="skeleton" style="width:100%;height:100%"></div><div class="detail-banner-gradient"></div>';
 
-      query(gql, { id: id }).then(function(res) {
-        var m = res.data.Media;
-        currentAnime = m;
-        var banner = m.bannerImage || getCover(m);
+      Promise.all([
+        atvFetch('info=' + id),
+        atvFetch('cat_id=' + id)
+      ]).then(function(results) {
+        var info = (results[0] && results[0][0]) ? results[0][0] : null;
+        var episodes = results[1] || [];
+
+        if (!info) {
+          document.getElementById('detail-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Anime não encontrado</div>';
+          return;
+        }
+
+        currentAnime = info;
+        currentAnimeEpisodes = episodes;
+        var banner = getCover(info);
+
         document.getElementById('detail-banner').innerHTML =
           '<button class="detail-back" onclick="closeDetail()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>' +
           '<img src="' + banner + '" alt="">' +
           '<div class="detail-banner-gradient"></div>';
 
-        var score = m.averageScore ? (m.averageScore / 10).toFixed(1) : 'N/A';
-        var stars = '';
-        if (m.averageScore) {
-          var full = Math.floor(m.averageScore / 20);
-          for (var i = 0; i < 5; i++) stars += '<svg width="14" height="14" viewBox="0 0 24 24" ' + (i < full ? 'fill="#fbbf24"' : 'fill="#374151"') + ' stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>';
-        }
+        var genresArr = (info.category_genres || '').split(',').map(function(g) { return g.trim(); }).filter(Boolean);
+        var subInfo = [info.ano || '', episodes.length + ' episódios'].filter(Boolean).join(' • ');
 
-        var studio = m.studios && m.studios.nodes[0] ? m.studios.nodes[0].name : '';
-        var statusMap = { FINISHED: 'Finalizado', RELEASING: 'Em exibição', NOT_YET_RELEASED: 'Não lançado', CANCELLED: 'Cancelado', HIATUS: 'Hiato' };
-        var epText = m.episodes ? m.episodes + ' episódios' : m.nextAiringEpisode ? 'Ep ' + m.nextAiringEpisode.episode + ' em breve' : '';
-        var subInfo = [studio, statusMap[m.status] || '', epText, m.seasonYear || ''].filter(Boolean).join(' • ');
-
-        var isFav = isInList('Favoritos', m.id);
-        var isWatch = isInList('Assistindo', m.id);
-        var isPlan = isInList('Quero Assistir', m.id);
+        var isFav = isInList('Favoritos', info.id);
+        var isWatch = isInList('Assistindo', info.id);
+        var isPlan = isInList('Quero Assistir', info.id);
 
         var body = '<div class="detail-meta">' +
-          '<div class="detail-poster"><img src="' + getCover(m) + '" alt=""></div>' +
+          '<div class="detail-poster"><img src="' + getCover(info) + '" alt=""></div>' +
           '<div class="detail-info">' +
-            '<div class="detail-title">' + getTitle(m) + '</div>' +
+            '<div class="detail-title">' + getTitle(info) + '</div>' +
             '<div class="detail-sub">' + subInfo + '</div>' +
-            '<div class="detail-score-row"><span class="detail-score">' + score + '</span><div class="detail-stars">' + stars + '</div></div>' +
           '</div></div>' +
           '<div class="detail-actions-row">' +
             '<button class="detail-action-btn' + (isWatch ? ' active' : '') + '" onclick="addToList(\'Assistindo\',currentAnime);refreshDetail()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>Assistindo</button>' +
@@ -780,43 +781,36 @@
             '<button class="detail-action-btn' + (isFav ? ' active' : '') + '" onclick="addToList(\'Favoritos\',currentAnime);refreshDetail()"><svg width="18" height="18" viewBox="0 0 24 24" fill="' + (isFav ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>Favorito</button>' +
           '</div>';
 
-        if (m.description) {
-          body += '<div class="detail-synopsis collapsed" id="synopsis">' + cleanDesc(m.description) + '</div>' +
+        if (info.category_description) {
+          body += '<div class="detail-synopsis collapsed" id="synopsis">' + cleanDesc(info.category_description) + '</div>' +
             '<button class="detail-more" onclick="toggleSynopsis()">Ler mais</button>';
         }
 
-        if (m.genres && m.genres.length) {
-          body += '<div class="detail-genres">' + m.genres.map(function(g) { return '<span class="tag">' + g + '</span>'; }).join('') + '</div>';
+        if (genresArr.length) {
+          body += '<div class="detail-genres">' + genresArr.map(function(g) { return '<span class="tag">' + g + '</span>'; }).join('') + '</div>';
         }
 
-        if (m.episodes || (m.nextAiringEpisode && m.nextAiringEpisode.episode)) {
-          var totalEp = m.episodes || (m.nextAiringEpisode ? m.nextAiringEpisode.episode - 1 : 0);
-          if (totalEp > 0) {
-            body += '<div class="section-header"><h2 class="section-title">Episódios</h2></div>';
-            body += '<div class="ep-list">';
-            var showEps = Math.min(totalEp, 24);
-            var watchHistory = getWatchHistory();
-            var thisAnimeHistory = watchHistory.find(function(h) { return h.id === m.id; });
-            for (var e = 1; e <= showEps; e++) {
-              var isWatchedEp = thisAnimeHistory && thisAnimeHistory.episode >= e;
-              var epProgress = (thisAnimeHistory && thisAnimeHistory.episode === e) ? thisAnimeHistory.progress : (isWatchedEp ? 100 : 0);
-              body += '<div class="ep-item' + (isWatchedEp ? ' watched' : '') + '" onclick="openPlayer(' + m.id + ',' + e + ',' + totalEp + ')">' +
-                '<div class="ep-thumb"><div class="ep-play-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>' +
-                (epProgress > 0 ? '<div class="ep-progress"><div class="ep-progress-fill" style="width:' + epProgress + '%"></div></div>' : '') +
-                '</div>' +
-                '<div class="ep-info"><div class="ep-num">Episódio ' + e + '</div><div class="ep-title">' + getTitle(m) + '</div></div></div>';
-            }
-            if (totalEp > 24) body += '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">+ ' + (totalEp - 24) + ' episódios</div>';
-            body += '</div>';
-          }
-        }
+        if (episodes.length > 0) {
+          body += '<div class="section-header"><h2 class="section-title">Episódios</h2></div>';
+          body += '<div class="ep-list">';
+          var showEps = episodes.slice(0, 50).reverse();
+          var watchHistory = getWatchHistory();
+          var thisAnimeHistory = watchHistory.find(function(h) { return h.id == info.id; });
 
-        if (m.recommendations && m.recommendations.nodes.length) {
-          var recs = m.recommendations.nodes.filter(function(n) { return n.mediaRecommendation; }).map(function(n) { return n.mediaRecommendation; });
-          if (recs.length) {
-            body += '<div class="section" style="margin-top:24px"><div class="section-header"><h2 class="section-title">Recomendados</h2></div>' +
-              '<div class="carousel">' + recs.map(createPosterCard).join('') + '</div></div>';
-          }
+          showEps.forEach(function(ep, idx) {
+            var epNumMatch = ep.title ? ep.title.match(/(\d+(?:\.\d+)?)\s*$/) : null;
+            var epNum = epNumMatch ? parseFloat(epNumMatch[1]) : (idx + 1);
+            var epTitle = ep.title || ('Episódio ' + epNum);
+            var isWatchedEp = thisAnimeHistory && thisAnimeHistory.episode >= epNum;
+            var epProgress = (thisAnimeHistory && thisAnimeHistory.episode === epNum) ? thisAnimeHistory.progress : (isWatchedEp ? 100 : 0);
+            body += '<div class="ep-item' + (isWatchedEp ? ' watched' : '') + '" onclick="openPlayer(\'' + info.id + '\',' + epNum + ',' + episodes.length + ',\'' + (ep.video_id || '') + '\')">' +
+              '<div class="ep-thumb"><div class="ep-play-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>' +
+              (epProgress > 0 ? '<div class="ep-progress"><div class="ep-progress-fill" style="width:' + epProgress + '%"></div></div>' : '') +
+              '</div>' +
+              '<div class="ep-info"><div class="ep-num">Episódio ' + epNum + '</div><div class="ep-title">' + epTitle + '</div></div></div>';
+          });
+          if (episodes.length > 50) body += '<div style="padding:12px;text-align:center;color:var(--muted);font-size:13px">+ ' + (episodes.length - 50) + ' episódios</div>';
+          body += '</div>';
         }
 
         document.getElementById('detail-body').innerHTML = body;
@@ -854,7 +848,11 @@
     var playerHasVideo = false;
 
     function slugify(title) {
-      return title.toLowerCase()
+      return title
+        .replace(/\s*\([^)]*\)\s*/g, ' ')
+        .replace(/\s+(Dublado|Legendado|PT-PT|PT-BR)\s*/gi, ' ')
+        .trim()
+        .toLowerCase()
         .normalize('NFD').replace(/[̀-ͯ]/g, '')
         .replace(/[^a-z0-9\s-]/g, '')
         .replace(/\s+/g, '-')
@@ -867,7 +865,7 @@
       return '';
     }
 
-    function openPlayer(animeId, ep, totalEps) {
+    function openPlayer(animeId, ep, totalEps, videoId) {
       playerAnimeId = animeId;
       playerEpisode = ep;
       playerTotalEps = totalEps;
@@ -879,6 +877,8 @@
       videoEl.style.display = 'none';
       videoEl.pause();
       videoEl.removeAttribute('src');
+      var iframe = document.getElementById('player-iframe');
+      if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
       document.getElementById('player-placeholder').style.display = 'flex';
       document.getElementById('player-status').textContent = 'Buscando episódio...';
       document.getElementById('player-spinner').style.display = 'block';
@@ -888,49 +888,77 @@
       document.getElementById('skip-opening-btn').classList.remove('show');
       document.getElementById('player-overlay').classList.add('show');
 
-      var title = currentAnime ? (currentAnime.title.romaji || currentAnime.title.english || '') : '';
+      var title = currentAnime ? getTitle(currentAnime) : '';
       var slug = slugify(title);
 
-      fetchEpisodeVideo(slug, ep);
+      fetchEpisodeVideo(slug, ep, videoId);
     }
 
-    function fetchEpisodeVideo(slug, ep) {
+    function fetchEpisodeVideo(slug, ep, videoId) {
+      if (videoId) {
+        fetch(getApiBase() + '/api/atv-video/' + videoId)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!data.error && data.video_url) {
+              loadVideo(data.video_url);
+            } else {
+              fetchEpisodeFallback(slug, ep);
+            }
+          })
+          .catch(function() { fetchEpisodeFallback(slug, ep); });
+      } else {
+        fetchEpisodeFallback(slug, ep);
+      }
+    }
+
+    function fetchEpisodeFallback(slug, ep) {
       var apiUrl = getApiBase() + '/api/episode/' + encodeURIComponent(slug) + '/' + ep;
       fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
-        if (!data.error && data.video_url) {
-          loadVideo(data.video_url, data.sources || []);
+        if (!data.error && data.data) {
+          var d = data.data;
+          if (d.type === 'direct' && d.video_url) {
+            loadVideo(d.video_url);
+          } else if (d.type === 'embed' && d.embed_urls && d.embed_urls.length > 0) {
+            loadEmbed(d.embed_urls[0]);
+          } else {
+            showPlayerError('Formato de vídeo não suportado');
+          }
         } else {
-          var altSlugs = [slug + '-legendado', slug + '-todos-os-episodios', slug + '-dublado'];
-          tryAltSlugs(altSlugs, ep, 0);
+          showPlayerError('Episódio não encontrado');
         }
       }).catch(function() {
-        document.getElementById('player-spinner').style.display = 'none';
-        document.getElementById('player-status').textContent = 'Servidor offline. Inicie: node server.js';
+        showPlayerError('Servidor offline. Inicie: node server.js');
       });
     }
 
-    function tryAltSlugs(slugs, ep, idx) {
-      if (idx >= slugs.length) {
-        document.getElementById('player-spinner').style.display = 'none';
-        document.getElementById('player-status').textContent = 'Episódio não encontrado neste provider';
-        return;
-      }
-      var apiUrl = getApiBase() + '/api/episode/' + encodeURIComponent(slugs[idx]) + '/' + ep;
-      fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
-        if (!data.error && data.video_url) {
-          loadVideo(data.video_url, data.sources || []);
-        } else {
-          tryAltSlugs(slugs, ep, idx + 1);
-        }
-      }).catch(function() { tryAltSlugs(slugs, ep, idx + 1); });
+    function showPlayerError(msg) {
+      document.getElementById('player-spinner').style.display = 'none';
+      document.getElementById('player-status').textContent = msg;
     }
 
-    function loadVideo(videoUrl, sources) {
+    function loadEmbed(embedUrl) {
       playerHasVideo = true;
-      var proxyUrl = getApiBase() + '/api/proxy?url=' + encodeURIComponent(videoUrl);
+      var iframe = document.getElementById('player-iframe');
+      iframe.src = embedUrl;
+      iframe.style.display = 'block';
+      document.getElementById('player-video').style.display = 'none';
+      document.getElementById('player-placeholder').style.display = 'none';
+      playerPlaying = true;
+      updatePlayPauseBtn();
+
+      if (currentAnime) {
+        saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), getCover(currentAnime), playerEpisode, 5, playerTotalEps);
+        renderContinueWatching();
+      }
+    }
+
+    function loadVideo(videoUrl) {
+      playerHasVideo = true;
+      var proxyUrl = getApiBase() + '/api/embed-proxy?url=' + encodeURIComponent(videoUrl);
       videoEl = document.getElementById('player-video');
       videoEl.src = proxyUrl;
       videoEl.style.display = 'block';
+      document.getElementById('player-iframe').style.display = 'none';
       document.getElementById('player-placeholder').style.display = 'none';
 
       videoEl.play().catch(function() {});
@@ -954,7 +982,7 @@
         playerPlaying = false;
         updatePlayPauseBtn();
         if (currentAnime) {
-          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, 100, playerTotalEps);
+          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), getCover(currentAnime), playerEpisode, 100, playerTotalEps);
         }
         showToast('Episódio concluído!');
       };
@@ -979,16 +1007,18 @@
 
     function closePlayer() {
       videoEl = document.getElementById('player-video');
+      var iframe = document.getElementById('player-iframe');
       var progress = 0;
-      if (playerHasVideo && videoEl.duration) {
+      if (playerHasVideo && videoEl && videoEl.duration) {
         progress = (videoEl.currentTime / videoEl.duration) * 100;
       }
-      videoEl.pause();
+      if (videoEl) videoEl.pause();
+      if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
       playerPlaying = false;
       document.getElementById('player-overlay').classList.remove('show');
 
       if (currentAnime && progress > 0) {
-        saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, progress, playerTotalEps);
+        saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), getCover(currentAnime), playerEpisode, progress, playerTotalEps);
         renderContinueWatching();
       }
     }
@@ -1028,17 +1058,27 @@
       }
     }
 
+    function findVideoIdForEp(epNum) {
+      if (!currentAnimeEpisodes || !currentAnimeEpisodes.length) return '';
+      var ep = currentAnimeEpisodes.find(function(e) {
+        var m = e.title ? e.title.match(/(\d+(?:\.\d+)?)\s*$/) : null;
+        return m && parseFloat(m[1]) === epNum;
+      });
+      return ep ? (ep.video_id || '') : '';
+    }
+
     function nextEpisode() {
       if (playerEpisode < playerTotalEps) {
         videoEl = document.getElementById('player-video');
         var progress = 0;
         if (playerHasVideo && videoEl.duration) progress = (videoEl.currentTime / videoEl.duration) * 100;
         if (currentAnime) {
-          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), currentAnime.bannerImage || getCover(currentAnime), playerEpisode, progress, playerTotalEps);
+          saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), getCover(currentAnime), playerEpisode, progress, playerTotalEps);
         }
         videoEl.pause();
         playerPlaying = false;
-        openPlayer(playerAnimeId, playerEpisode + 1, playerTotalEps);
+        var nextVid = findVideoIdForEp(playerEpisode + 1);
+        openPlayer(playerAnimeId, playerEpisode + 1, playerTotalEps, nextVid);
       } else {
         showToast('Último episódio');
       }
@@ -1049,34 +1089,32 @@
         videoEl = document.getElementById('player-video');
         videoEl.pause();
         playerPlaying = false;
-        openPlayer(playerAnimeId, playerEpisode - 1, playerTotalEps);
+        var prevVid = findVideoIdForEp(playerEpisode - 1);
+        openPlayer(playerAnimeId, playerEpisode - 1, playerTotalEps, prevVid);
       } else {
         showToast('Primeiro episódio');
       }
     }
 
-    // ── Ranking (real data from AniList) ──
+    // ── Ranking (AnimeTV API) ──
     function loadRanking(el, sort) {
       if (el) {
         el.parentElement.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
         el.classList.add('active');
       }
-      var sortMap = { score: 'SCORE_DESC', popularity: 'POPULARITY_DESC', trending: 'TRENDING_DESC', favorites: 'FAVOURITES_DESC' };
-      var gql = 'query($sort:[MediaSort]){Page(perPage:20){media(type:ANIME,sort:$sort){' + MEDIA_FIELDS + '}}}';
 
       document.getElementById('ranking-list').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Carregando ranking...</div>';
 
-      query(gql, { sort: sortMap[sort] || 'SCORE_DESC' }).then(function(res) {
-        var media = res.data.Page.media;
+      atvFetch('populares').then(function(data) {
+        if (!Array.isArray(data)) data = [];
+        var media = data.slice(0, 20);
         document.getElementById('ranking-list').innerHTML = media.map(function(m, i) {
           var posClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-          var score = m.averageScore ? (m.averageScore / 10).toFixed(1) : '-';
-          var sub = [m.episodes ? m.episodes + ' eps' : '', m.seasonYear || '', (m.genres || []).slice(0, 2).join(', ')].filter(Boolean).join(' • ');
-          return '<div class="rank-item" onclick="openDetail(' + m.id + ')" style="cursor:pointer">' +
+          var aid = m.id || m.category_id;
+          return '<div class="rank-item" onclick="openDetail(\'' + aid + '\')" style="cursor:pointer">' +
             '<div class="rank-pos ' + posClass + '">' + (i + 1) + '</div>' +
             '<div class="rank-avatar"><img src="' + getCover(m) + '" alt="" style="border-radius:50%"></div>' +
-            '<div class="rank-info"><div class="rank-name">' + getTitle(m) + '</div><div class="rank-detail">' + sub + '</div></div>' +
-            '<div class="rank-score">' + score + '</div></div>';
+            '<div class="rank-info"><div class="rank-name">' + getTitle(m) + '</div></div></div>';
         }).join('');
       });
     }
@@ -1207,9 +1245,8 @@
 
       var body = '<div class="anime-grid" style="margin-top:20px">';
       items.forEach(function(a) {
-        var scoreHtml = a.score ? '<div class="poster-score"><svg viewBox="0 0 24 24" fill="#fbbf24" stroke="none" width="10" height="10"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>' + (a.score / 10).toFixed(1) + '</div>' : '';
-        body += '<div class="poster-card" onclick="openDetail(' + a.id + ')">' +
-          '<div class="poster-img">' + scoreHtml + '<img src="' + a.cover + '" alt="' + a.title + '" loading="lazy"></div>' +
+        body += '<div class="poster-card" onclick="openDetail(\'' + a.id + '\')">' +
+          '<div class="poster-img"><img src="' + a.cover + '" alt="' + a.title + '" loading="lazy"></div>' +
           '<div class="poster-title">' + a.title + '</div></div>';
       });
       body += '</div>';

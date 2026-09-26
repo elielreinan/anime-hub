@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v2';
+var CACHE = 'animehub-v3';
 var PRECACHE = ['/', '/index.html', '/manifest.json'];
 
 self.addEventListener('install', function(e) {
@@ -19,7 +19,7 @@ self.addEventListener('activate', function(e) {
 
 self.addEventListener('fetch', function(e) {
   if (e.request.method !== 'GET') return;
-  if (e.request.url.includes('graphql.anilist.co')) {
+  if (e.request.url.includes('atv2.net')) {
     e.respondWith(
       fetch(e.request).then(function(r) {
         var clone = r.clone();
@@ -31,7 +31,7 @@ self.addEventListener('fetch', function(e) {
     );
     return;
   }
-  if (e.request.url.match(/\.(png|jpg|jpeg|webp|gif)$/i) || e.request.url.includes('s4.anilist.co')) {
+  if (e.request.url.match(/\.(png|jpg|jpeg|webp|gif)$/i) || e.request.url.includes('cdn.atv2.net')) {
     e.respondWith(
       caches.match(e.request).then(function(cached) {
         if (cached) return cached;
