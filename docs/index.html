@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0D0D12">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.json">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <title>Anime Hub</title>
+  <style>
+    :root { --accent: #FF5A26; --bg: #0D0D12; --card: #1A1A24; --border: #1f2937; --muted: #6b7280; --text: #e5e7eb; }
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: var(--bg); }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg); color: #fff; overflow-x: hidden; min-height: 100vh; }
+
+    .icon { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .icon svg { display: block; }
+    .chevron { color: #4b5563; display: flex; align-items: center; }
+    .chevron-svg { width: 18px; height: 18px; }
+
+    /* Header */
+    .header { position: fixed; top: 0; left: 0; width: 100%; z-index: 50; padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(to bottom, rgba(0,0,0,0.9), rgba(0,0,0,0.4), transparent); }
+    .logo { font-size: 22px; font-weight: 900; font-style: italic; letter-spacing: -1px; }
+    .logo-accent { color: var(--accent); }
+    .header-actions { display: flex; gap: 4px; }
+    .header-btn { padding: 10px; color: #fff; background: none; border: none; cursor: pointer; border-radius: 50%; transition: color 0.2s; display: flex; align-items: center; justify-content: center; }
+    .header-btn:hover { color: var(--accent); }
+    .header-btn:active { transform: scale(0.95); }
+
+    /* Hero Banner */
+    .hero { position: relative; width: 100%; height: 70vh; max-height: 600px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; }
+    .hero-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .hero-gradient { position: absolute; inset: 0; background: linear-gradient(to top, var(--bg) 0%, rgba(13,13,18,0.6) 50%, transparent 100%); }
+    .hero-content { position: relative; z-index: 10; padding: 0 16px 32px; display: flex; flex-direction: column; align-items: center; text-align: center; max-width: 600px; margin: 0 auto; }
+    .hero-title { font-size: clamp(28px, 5vw, 40px); font-weight: 900; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 12px; text-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+    .hero-tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 24px; }
+    .tag { padding: 4px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #d1d5db; background: rgba(255,255,255,0.1); backdrop-filter: blur(8px); border-radius: 2px; border: 1px solid rgba(255,255,255,0.05); }
+    .hero-buttons { display: flex; width: 100%; gap: 12px; max-width: 400px; }
+    .btn-primary { flex: 1; min-height: 48px; background: var(--accent); color: #fff; font-weight: 700; font-size: 14px; border: none; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; box-shadow: 0 0 15px rgba(255,90,38,0.4); transition: all 0.2s; }
+    .btn-primary:active { transform: scale(0.95); background: #ff7246; }
+    .btn-secondary { flex: 1; min-height: 48px; background: rgba(255,255,255,0.1); backdrop-filter: blur(12px); color: #fff; font-weight: 700; font-size: 14px; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; transition: all 0.2s; }
+    .btn-secondary:active { transform: scale(0.95); background: rgba(255,255,255,0.2); }
+
+    /* Content Area */
+    .content { padding-bottom: 90px; margin-top: -16px; position: relative; z-index: 20; }
+
+    /* Section */
+    .section { margin-top: 24px; margin-bottom: 8px; }
+    .section-header { padding: 0 16px 12px; display: flex; justify-content: space-between; align-items: flex-end; }
+    .section-title { font-size: 17px; font-weight: 700; color: #fff; }
+
+    /* Carousel */
+    .carousel { display: flex; gap: 16px; padding: 0 16px 16px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; -ms-overflow-style: none; scrollbar-width: none; }
+    .carousel::-webkit-scrollbar { display: none; }
+
+    /* Continue Watching Card */
+    .continue-card { position: relative; width: 280px; height: 158px; flex-shrink: 0; border-radius: 12px; overflow: hidden; scroll-snap-align: start; cursor: pointer; transition: transform 0.15s; }
+    .continue-card:active { transform: scale(0.98); }
+    .continue-card img { width: 100%; height: 100%; object-fit: cover; }
+    .continue-overlay { position: absolute; inset: 0; background: rgba(0,0,0,0.35); }
+    .continue-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.2s; }
+    .continue-card:hover .continue-play { opacity: 1; }
+    .play-circle { background: rgba(0,0,0,0.5); width: 48px; height: 48px; border-radius: 50%; backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.2); display: flex; align-items: center; justify-content: center; color: #fff; }
+    .continue-info { position: absolute; bottom: 0; left: 0; width: 100%; padding: 12px; background: linear-gradient(transparent, rgba(0,0,0,0.9)); }
+    .continue-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .continue-ep { font-size: 11px; color: #d1d5db; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .progress-bar { position: absolute; bottom: 0; left: 0; width: 100%; height: 3px; background: #374151; }
+    .progress-fill { height: 100%; background: var(--accent); }
+
+    /* Poster Card */
+    .poster-card { width: 120px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; scroll-snap-align: start; cursor: pointer; transition: transform 0.15s; }
+    .poster-card:active { transform: scale(0.96); }
+    .poster-img { width: 100%; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden; background: var(--card); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .poster-img img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+    .poster-card:hover .poster-img img { transform: scale(1.05); }
+    .poster-title { font-size: 12px; font-weight: 500; color: var(--text); line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* Bottom Tab Bar */
+    .tab-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: rgba(26,26,36,0.95); backdrop-filter: blur(20px); border-top: 1px solid var(--border); z-index: 50; padding: 6px 0; padding-bottom: max(6px, env(safe-area-inset-bottom)); box-shadow: 0 -5px 20px rgba(0,0,0,0.5); }
+    .tab-bar-inner { display: flex; justify-content: space-around; align-items: center; height: 52px; max-width: 500px; margin: 0 auto; }
+    .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; height: 100%; gap: 3px; background: none; border: none; cursor: pointer; position: relative; }
+    .tab-indicator { position: absolute; top: -6px; width: 28px; height: 2px; background: var(--accent); border-radius: 2px; box-shadow: 0 0 8px var(--accent); display: none; }
+    .tab.active .tab-indicator { display: block; }
+    .tab-icon { transition: color 0.3s; color: #9ca3af; display: flex; align-items: center; justify-content: center; }
+    .tab.active .tab-icon { color: var(--accent); }
+    .tab-label { font-size: 9px; font-weight: 500; transition: color 0.3s; color: #9ca3af; }
+    .tab.active .tab-label { color: var(--accent); }
+
+    /* Pages */
+    .page { display: none; }
+    .page.active { display: block; }
+    .page-spacer { height: 60px; }
+
+    /* Explore Page */
+    .search-box { margin: 12px 16px; display: flex; align-items: center; background: var(--card); border: 1px solid #2d2d3d; border-radius: 12px; padding: 0 14px; gap: 10px; }
+    .search-box input { flex: 1; background: none; border: none; color: #fff; padding: 14px 0; font-size: 15px; outline: none; font-family: inherit; }
+    .search-box input::placeholder { color: var(--muted); }
+    .search-box .icon { color: var(--muted); }
+    .filter-row { display: flex; gap: 8px; padding: 0 16px 16px; overflow-x: auto; -webkit-overflow-scrolling: touch; -ms-overflow-style: none; scrollbar-width: none; }
+    .filter-row::-webkit-scrollbar { display: none; }
+    .filter-chip { padding: 8px 16px; border-radius: 24px; border: 1px solid #2d2d3d; font-size: 13px; color: #d1d5db; white-space: nowrap; cursor: pointer; transition: all 0.2s; background: transparent; font-family: inherit; font-weight: 500; }
+    .filter-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; box-shadow: 0 0 10px rgba(255,90,38,0.3); }
+    .anime-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 12px; padding: 0 16px; }
+    .anime-grid .poster-card { width: auto; }
+
+    /* List Item */
+    .list-item { display: flex; align-items: center; padding: 16px; border-bottom: 1px solid var(--card); cursor: pointer; transition: background 0.15s; gap: 14px; }
+    .list-item:active { background: var(--card); }
+    .list-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .list-icon.watching { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .list-icon.plan { background: rgba(168,85,247,0.15); color: #a855f7; }
+    .list-icon.completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .list-icon.favorites { background: rgba(239,68,68,0.15); color: #ef4444; }
+    .list-icon.clan { background: rgba(255,90,38,0.15); color: var(--accent); }
+    .list-info { flex: 1; min-width: 0; }
+    .list-name { font-size: 15px; font-weight: 600; }
+    .list-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    /* Community Page */
+    .community-card { margin: 0 16px 12px; background: var(--card); border-radius: 14px; padding: 16px; border: 1px solid #2d2d3d; }
+    .community-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .community-avatar { width: 40px; height: 40px; border-radius: 50%; background: #2d2d3d; display: flex; align-items: center; justify-content: center; color: #9ca3af; flex-shrink: 0; overflow: hidden; }
+    .community-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .community-user { font-size: 14px; font-weight: 600; }
+    .community-time { font-size: 11px; color: var(--muted); }
+    .community-text { font-size: 14px; color: var(--text); line-height: 1.5; margin-bottom: 12px; }
+    .community-image { width: 100%; border-radius: 10px; margin-bottom: 12px; max-height: 300px; object-fit: cover; }
+    .community-actions { display: flex; gap: 20px; }
+    .community-action { display: flex; align-items: center; gap: 6px; background: none; border: none; color: #9ca3af; font-size: 13px; cursor: pointer; font-family: inherit; transition: color 0.2s; }
+    .community-action:hover { color: var(--accent); }
+    .community-action.liked { color: #ef4444; }
+
+    /* Clan Section */
+    .clan-card { margin: 0 16px 12px; background: var(--card); border-radius: 14px; padding: 16px; border: 1px solid #2d2d3d; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: background 0.15s; }
+    .clan-card:active { background: #22222e; }
+    .clan-emblem { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
+    .clan-info { flex: 1; min-width: 0; }
+    .clan-name { font-size: 15px; font-weight: 700; }
+    .clan-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .clan-members { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 4px; }
+    .clan-badge { padding: 4px 10px; background: rgba(255,90,38,0.15); color: var(--accent); font-size: 11px; font-weight: 700; border-radius: 20px; white-space: nowrap; }
+
+    /* Ranking Page */
+    .rank-item { display: flex; align-items: center; padding: 14px 16px; gap: 14px; border-bottom: 1px solid var(--card); }
+    .rank-pos { width: 32px; font-size: 18px; font-weight: 800; text-align: center; flex-shrink: 0; }
+    .rank-pos.gold { color: #fbbf24; }
+    .rank-pos.silver { color: #9ca3af; }
+    .rank-pos.bronze { color: #cd7f32; }
+    .rank-avatar { width: 44px; height: 44px; border-radius: 50%; background: #2d2d3d; display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0; }
+    .rank-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .rank-info { flex: 1; min-width: 0; }
+    .rank-name { font-size: 14px; font-weight: 600; }
+    .rank-detail { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .rank-score { font-size: 16px; font-weight: 800; color: var(--accent); flex-shrink: 0; }
+    .rank-tabs { display: flex; gap: 8px; padding: 0 16px 16px; overflow-x: auto; -ms-overflow-style: none; scrollbar-width: none; }
+    .rank-tabs::-webkit-scrollbar { display: none; }
+
+    /* Profile Page */
+    .profile-header { text-align: center; padding: 32px 16px 24px; border-bottom: 1px solid var(--card); }
+    .avatar { width: 88px; height: 88px; border-radius: 50%; background: linear-gradient(135deg, var(--accent), #ff7246); margin: 0 auto 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 20px rgba(255,90,38,0.3); color: #fff; }
+    .profile-name { font-size: 22px; font-weight: 800; }
+    .profile-email { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .stats-row { display: flex; justify-content: space-around; padding: 24px 0; border-bottom: 1px solid var(--card); }
+    .stat { text-align: center; }
+    .stat-num { font-size: 24px; font-weight: 800; color: var(--accent); }
+    .stat-label { font-size: 11px; color: var(--muted); margin-top: 4px; font-weight: 500; }
+    .menu-item { display: flex; align-items: center; gap: 14px; padding: 16px; border-bottom: 1px solid rgba(26,26,36,0.8); cursor: pointer; transition: background 0.15s; }
+    .menu-item:active { background: var(--card); }
+    .menu-icon { width: 28px; display: flex; align-items: center; justify-content: center; color: #9ca3af; }
+    .menu-text { font-size: 15px; flex: 1; font-weight: 500; }
+    .action-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: calc(100% - 32px); margin: 24px 16px 16px; padding: 16px; border: none; border-radius: 12px; color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .action-btn:active { transform: scale(0.98); }
+    .action-btn.primary { background: var(--accent); box-shadow: 0 0 15px rgba(255,90,38,0.3); }
+    .action-btn.ghost { background: var(--card); border: 1px dashed #2d2d3d; box-shadow: none; }
+    .footer { text-align: center; padding: 24px 16px 32px; }
+    .footer span { color: #4b5563; font-size: 12px; }
+    .footer a { color: var(--accent); text-decoration: none; font-weight: 700; }
+
+    /* Player Modal */
+    .player-modal { display: none; position: fixed; inset: 0; background: var(--bg); z-index: 200; flex-direction: column; }
+    .player-modal.show { display: flex; }
+    .player-bar { display: flex; align-items: center; padding: 14px 16px; background: var(--card); border-bottom: 1px solid #2d2d3d; gap: 14px; }
+    .player-close { cursor: pointer; background: none; border: none; color: #fff; padding: 4px; display: flex; align-items: center; justify-content: center; }
+    .player-close:hover { color: var(--accent); }
+    .player-bar-title { font-weight: 600; font-size: 15px; }
+    .player-area { flex: 1; background: #111; display: flex; align-items: center; justify-content: center; }
+    .play-big { cursor: pointer; transition: transform 0.2s; color: #fff; opacity: 0.9; }
+    .play-big:hover { opacity: 1; }
+    .play-big:active { transform: scale(0.9); }
+    .player-subtitle { color: var(--muted); margin-top: 12px; font-size: 13px; text-align: center; }
+    .player-info { padding: 20px 16px; background: var(--card); border-top: 1px solid #2d2d3d; }
+    .player-anime-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+    .player-ep-title { font-size: 13px; color: var(--muted); }
+
+    /* Sub-tabs */
+    .sub-tabs { display: flex; gap: 0; padding: 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--card); }
+    .sub-tab { flex: 1; padding: 12px 0; text-align: center; font-size: 14px; font-weight: 600; color: #9ca3af; background: none; border: none; cursor: pointer; border-bottom: 2px solid transparent; font-family: inherit; transition: all 0.2s; }
+    .sub-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <h1 class="logo"><span class="logo-accent">ANIME</span>HUB</h1>
+    <div class="header-actions">
+      <button class="header-btn" aria-label="Notificações">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+      </button>
+      <button class="header-btn" aria-label="Buscar" onclick="switchTab('explore')">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- HOME -->
+  <div id="page-home" class="page active">
+    <section class="hero">
+      <img class="hero-img" src="https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&q=80&w=1200" alt="Echoes of Eternity">
+      <div class="hero-gradient"></div>
+      <div class="hero-content">
+        <h2 class="hero-title">ECHOES OF ETERNITY</h2>
+        <div class="hero-tags">
+          <span class="tag">Shounen</span><span class="tag">Fantasia</span><span class="tag">HD</span><span class="tag">Dub/Leg</span>
+        </div>
+        <div class="hero-buttons">
+          <button class="btn-primary" onclick="openPlayer('Echoes of Eternity','Episódio 1 - O Despertar')">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>Assistir
+          </button>
+          <button class="btn-secondary">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Minha Lista
+          </button>
+        </div>
+      </div>
+    </section>
+    <div class="content">
+      <section class="section"><div class="section-header"><h2 class="section-title">Continuar Assistindo</h2></div><div class="carousel" id="continue-watching"></div></section>
+      <section class="section"><div class="section-header"><h2 class="section-title">Em Alta</h2></div><div class="carousel" id="trending"></div></section>
+      <section class="section"><div class="section-header"><h2 class="section-title">Lançamentos da Temporada</h2></div><div class="carousel" id="new-releases"></div></section>
+      <section class="section"><div class="section-header"><h2 class="section-title">Recomendados</h2></div><div class="carousel" id="recommended"></div></section>
+    </div>
+  </div>
+
+  <!-- EXPLORE -->
+  <div id="page-explore" class="page">
+    <div class="page-spacer"></div>
+    <div class="search-box">
+      <span class="icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></span>
+      <input type="text" id="search-input" placeholder="Buscar anime..." oninput="filterAnime()">
+    </div>
+    <div class="filter-row">
+      <button class="filter-chip active" onclick="toggleFilter(this,'All')">Todos</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Shounen')">Shounen</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Fantasia')">Fantasia</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Ação')">Ação</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Romance')">Romance</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Sci-Fi')">Sci-Fi</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Comédia')">Comédia</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'Terror')">Terror</button>
+    </div>
+    <div class="anime-grid" id="search-results"></div>
+    <div style="height:90px"></div>
+  </div>
+
+  <!-- COMMUNITY -->
+  <div id="page-community" class="page">
+    <div class="page-spacer"></div>
+    <div class="sub-tabs">
+      <button class="sub-tab active" onclick="switchCommunityTab(this,'feed')">Feed</button>
+      <button class="sub-tab" onclick="switchCommunityTab(this,'clans')">Clãs</button>
+    </div>
+    <div id="community-feed">
+      <div class="community-card">
+        <div class="community-header">
+          <div class="community-avatar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <div><div class="community-user">KageShadow</div><div class="community-time">2h atrás</div></div>
+        </div>
+        <div class="community-text">Alguém mais ficou de queixo caído com o episódio 12 de Echoes of Eternity? Aquela cena final foi insana! 🔥</div>
+        <div class="community-actions">
+          <button class="community-action liked" onclick="this.classList.toggle('liked')"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 42</button>
+          <button class="community-action"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg> 18</button>
+          <button class="community-action"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg> Compartilhar</button>
+        </div>
+      </div>
+      <div class="community-card">
+        <div class="community-header">
+          <div class="community-avatar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <div><div class="community-user">NeonOtaku</div><div class="community-time">5h atrás</div></div>
+        </div>
+        <div class="community-text">Meu ranking de animes da temporada: 1. Echoes of Eternity, 2. Cyber Samurai, 3. Lâmina Divina. Discordem nos comentários 😤</div>
+        <img class="community-image" src="https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=80&w=600&h=300" alt="Post" loading="lazy">
+        <div class="community-actions">
+          <button class="community-action" onclick="this.classList.toggle('liked')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 87</button>
+          <button class="community-action"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg> 34</button>
+          <button class="community-action"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg> Compartilhar</button>
+        </div>
+      </div>
+      <div class="community-card">
+        <div class="community-header">
+          <div class="community-avatar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <div><div class="community-user">SakuraFan</div><div class="community-time">8h atrás</div></div>
+        </div>
+        <div class="community-text">Crystal Saga é muito subestimado. A trilha sonora é de outro nível e o romance é super bem desenvolvido. Quem concorda?</div>
+        <div class="community-actions">
+          <button class="community-action" onclick="this.classList.toggle('liked')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg> 23</button>
+          <button class="community-action"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg> 9</button>
+          <button class="community-action"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg> Compartilhar</button>
+        </div>
+      </div>
+    </div>
+    <div id="community-clans" style="display:none">
+      <div class="clan-card">
+        <div class="clan-emblem" style="background:linear-gradient(135deg,#ef4444,#991b1b)">⚔️</div>
+        <div class="clan-info">
+          <div class="clan-name">Akatsuki Elite</div>
+          <div class="clan-desc">Clã competitivo focado em rankings</div>
+          <div class="clan-members">1.247 membros</div>
+        </div>
+        <span class="clan-badge">TOP 1</span>
+      </div>
+      <div class="clan-card">
+        <div class="clan-emblem" style="background:linear-gradient(135deg,#3b82f6,#1d4ed8)">🐉</div>
+        <div class="clan-info">
+          <div class="clan-name">Dragon Slayers</div>
+          <div class="clan-desc">União faz a força — assistimos juntos</div>
+          <div class="clan-members">893 membros</div>
+        </div>
+        <span class="clan-badge">TOP 2</span>
+      </div>
+      <div class="clan-card">
+        <div class="clan-emblem" style="background:linear-gradient(135deg,#a855f7,#7c3aed)">🌙</div>
+        <div class="clan-info">
+          <div class="clan-name">Moon Watchers</div>
+          <div class="clan-desc">Maratonas de madrugada toda semana</div>
+          <div class="clan-members">651 membros</div>
+        </div>
+        <span class="clan-badge">TOP 3</span>
+      </div>
+      <div class="clan-card">
+        <div class="clan-emblem" style="background:linear-gradient(135deg,#22c55e,#15803d)">🍃</div>
+        <div class="clan-info">
+          <div class="clan-name">Konoha FC</div>
+          <div class="clan-desc">Fãs de Naruto e shounen clássico</div>
+          <div class="clan-members">512 membros</div>
+        </div>
+      </div>
+      <button class="action-btn ghost" style="margin-top:12px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+        Criar Novo Clã
+      </button>
+    </div>
+    <div style="height:90px"></div>
+  </div>
+
+  <!-- RANKING -->
+  <div id="page-ranking" class="page">
+    <div class="page-spacer"></div>
+    <div class="section-header" style="padding-top:4px"><h2 class="section-title">Ranking Global</h2></div>
+    <div class="rank-tabs">
+      <button class="filter-chip active" onclick="toggleFilter(this,'rank')">Geral</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'rank')">Episódios</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'rank')">Horas</button>
+      <button class="filter-chip" onclick="toggleFilter(this,'rank')">Clãs</button>
+    </div>
+    <div id="ranking-list"></div>
+    <div style="height:90px"></div>
+  </div>
+
+  <!-- PROFILE -->
+  <div id="page-profile" class="page">
+    <div class="page-spacer"></div>
+    <div class="profile-header">
+      <div class="avatar"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+      <div class="profile-name">Eliel</div>
+      <div class="profile-email">eliel.reiinan@gmail.com</div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-num">5</div><div class="stat-label">Assistindo</div></div>
+      <div class="stat"><div class="stat-num">48</div><div class="stat-label">Completados</div></div>
+      <div class="stat"><div class="stat-num">8</div><div class="stat-label">Favoritos</div></div>
+      <div class="stat"><div class="stat-num">#42</div><div class="stat-label">Ranking</div></div>
+    </div>
+    <div class="section-header" style="padding-top:16px"><h2 class="section-title">Minha Lista</h2></div>
+    <div class="list-item">
+      <div class="list-icon watching"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></svg></div>
+      <div class="list-info"><div class="list-name">Assistindo</div><div class="list-count">5 anime</div></div>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <div class="list-item">
+      <div class="list-icon plan"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+      <div class="list-info"><div class="list-name">Quero Assistir</div><div class="list-count">12 anime</div></div>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <div class="list-item">
+      <div class="list-icon completed"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+      <div class="list-info"><div class="list-name">Completados</div><div class="list-count">48 anime</div></div>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <div class="list-item">
+      <div class="list-icon favorites"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></div>
+      <div class="list-info"><div class="list-name">Favoritos</div><div class="list-count">8 anime</div></div>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <div style="height:16px"></div>
+    <div class="menu-item">
+      <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></span>
+      <span class="menu-text">Configurações</span>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <div class="menu-item">
+      <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg></span>
+      <span class="menu-text">Downloads</span>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <div class="menu-item">
+      <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></span>
+      <span class="menu-text">Ajuda & Suporte</span>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </div>
+    <button class="action-btn primary">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/></svg>
+      Sair da Conta
+    </button>
+    <div class="footer"><span>Codado por </span><a href="https://instagram.com" target="_blank">2E</a></div>
+  </div>
+
+  <!-- PLAYER MODAL -->
+  <div class="player-modal" id="player-modal">
+    <div class="player-bar">
+      <button class="player-close" onclick="closePlayer()"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+      <span class="player-bar-title" id="player-bar-title"></span>
+    </div>
+    <div class="player-area">
+      <div style="text-align:center">
+        <div class="play-big"><svg width="72" height="72" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5.14v14l11-7-11-7z"/></svg></div>
+        <p class="player-subtitle">Toque para reproduzir</p>
+      </div>
+    </div>
+    <div class="player-info">
+      <div class="player-anime-title" id="player-anime-title"></div>
+      <div class="player-ep-title" id="player-ep-title"></div>
+    </div>
+  </div>
+
+  <!-- TAB BAR -->
+  <nav class="tab-bar">
+    <div class="tab-bar-inner">
+      <button class="tab active" onclick="switchTab('home')">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+        <span class="tab-label">Início</span>
+      </button>
+      <button class="tab" onclick="switchTab('explore')">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span>
+        <span class="tab-label">Explorar</span>
+      </button>
+      <button class="tab" onclick="switchTab('community')">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        <span class="tab-label">Social</span>
+      </button>
+      <button class="tab" onclick="switchTab('ranking')">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5C7 4 7 7 7 7"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5C17 4 17 7 17 7"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg></span>
+        <span class="tab-label">Ranking</span>
+      </button>
+      <button class="tab" onclick="switchTab('profile')">
+        <div class="tab-indicator"></div>
+        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+        <span class="tab-label">Perfil</span>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    var SVG_PLAY = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+
+    var continueWatching = [
+      { id:1, title:"Cyber Samurai", episode:"T1:E4 - O Despertar", progress:65, image:"https://images.unsplash.com/photo-1618336753974-aae8e04506aa?auto=format&fit=crop&q=80&w=400&h=225" },
+      { id:2, title:"Neon Tokyo", episode:"T2:E12 - Fim da Linha", progress:90, image:"https://images.unsplash.com/photo-1542051812871-75f412670eb3?auto=format&fit=crop&q=80&w=400&h=225" },
+    ];
+
+    var animeDB = [
+      { id:3, title:"Lâmina Divina", genre:"Shounen", image:"https://images.unsplash.com/photo-1580130281320-0ef0754f2bf7?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:4, title:"Espíritos Astrais", genre:"Fantasia", image:"https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:5, title:"Kage no Monogatari", genre:"Ação", image:"https://images.unsplash.com/photo-1560930950-5cc20e8cbe14?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:6, title:"Mecha Zero", genre:"Sci-Fi", image:"https://images.unsplash.com/photo-1618519764620-7403abdbdf9c?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:7, title:"Yurei", genre:"Terror", image:"https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:8, title:"Academia de Heróis", genre:"Shounen", image:"https://images.unsplash.com/photo-1541562232579-512a21360020?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:9, title:"Lendas do Dragão", genre:"Fantasia", image:"https://images.unsplash.com/photo-1533073526757-2c8ca1df9f1c?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:10, title:"Samurai X", genre:"Ação", image:"https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&q=80&w=300&h=450" },
+      { id:11, title:"Crystal Saga", genre:"Romance", image:"https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&q=80&w=300&h=450" },
+    ];
+
+    var rankingData = [
+      { name:"KageShadow", detail:"423 episódios • Akatsuki Elite", score:"12.840", avatar:null },
+      { name:"NeonOtaku", detail:"398 episódios • Dragon Slayers", score:"11.520", avatar:null },
+      { name:"SakuraFan", detail:"367 episódios • Moon Watchers", score:"10.890", avatar:null },
+      { name:"DragonBlade", detail:"341 episódios • Konoha FC", score:"9.750", avatar:null },
+      { name:"MechaKing", detail:"312 episódios • Akatsuki Elite", score:"8.940", avatar:null },
+      { name:"AnimeWizard", detail:"298 episódios • Dragon Slayers", score:"8.210", avatar:null },
+      { name:"TsukiYami", detail:"276 episódios • Moon Watchers", score:"7.680", avatar:null },
+      { name:"Eliel", detail:"248 episódios • Sem clã", score:"6.920", avatar:null, isMe:true },
+    ];
+
+    function esc(s) { return s.replace(/'/g, "\\'"); }
+
+    function createContinueCard(item) {
+      return '<div class="continue-card" onclick="openPlayer(\'' + esc(item.title) + '\',\'' + esc(item.episode) + '\')">' +
+        '<img src="' + item.image + '" alt="' + item.title + '" loading="lazy">' +
+        '<div class="continue-overlay"></div>' +
+        '<div class="continue-play"><div class="play-circle">' + SVG_PLAY + '</div></div>' +
+        '<div class="continue-info"><div class="continue-title">' + item.title + '</div><div class="continue-ep">' + item.episode + '</div></div>' +
+        '<div class="progress-bar"><div class="progress-fill" style="width:' + item.progress + '%"></div></div></div>';
+    }
+
+    function createPosterCard(item) {
+      return '<div class="poster-card" onclick="openPlayer(\'' + esc(item.title) + '\',\'Episódio 1\')">' +
+        '<div class="poster-img"><img src="' + item.image + '" alt="' + item.title + '" loading="lazy"></div>' +
+        '<div class="poster-title">' + item.title + '</div></div>';
+    }
+
+    function renderRanking() {
+      var html = rankingData.map(function(r, i) {
+        var posClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
+        var highlight = r.isMe ? 'style="background:rgba(255,90,38,0.08)"' : '';
+        return '<div class="rank-item" ' + highlight + '>' +
+          '<div class="rank-pos ' + posClass + '">' + (i+1) + '</div>' +
+          '<div class="rank-avatar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>' +
+          '<div class="rank-info"><div class="rank-name">' + r.name + (r.isMe ? ' <span style="color:var(--accent);font-size:11px">(você)</span>' : '') + '</div>' +
+          '<div class="rank-detail">' + r.detail + '</div></div>' +
+          '<div class="rank-score">' + r.score + '</div></div>';
+      }).join('');
+      document.getElementById('ranking-list').innerHTML = html;
+    }
+
+    document.getElementById('continue-watching').innerHTML = continueWatching.map(createContinueCard).join('');
+    document.getElementById('trending').innerHTML = animeDB.slice(0,4).map(createPosterCard).join('');
+    document.getElementById('new-releases').innerHTML = animeDB.slice(4,7).map(createPosterCard).join('');
+    document.getElementById('recommended').innerHTML = animeDB.slice(2,6).map(createPosterCard).join('');
+    document.getElementById('search-results').innerHTML = animeDB.map(createPosterCard).join('');
+    renderRanking();
+
+    function switchTab(name) {
+      document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+      document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+      document.getElementById('page-' + name).classList.add('active');
+      var tabs = document.querySelectorAll('.tab');
+      var map = { home:0, explore:1, community:2, ranking:3, profile:4 };
+      if (map[name] !== undefined) tabs[map[name]].classList.add('active');
+      window.scrollTo(0,0);
+    }
+
+    function switchCommunityTab(el, tab) {
+      document.querySelectorAll('.sub-tab').forEach(function(t) { t.classList.remove('active'); });
+      el.classList.add('active');
+      document.getElementById('community-feed').style.display = tab === 'feed' ? 'block' : 'none';
+      document.getElementById('community-clans').style.display = tab === 'clans' ? 'block' : 'none';
+    }
+
+    function toggleFilter(el, genre) {
+      el.parentElement.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
+      el.classList.add('active');
+      if (genre === 'rank') return;
+      var filtered = genre === 'All' ? animeDB : animeDB.filter(function(a) { return a.genre === genre; });
+      document.getElementById('search-results').innerHTML = filtered.map(createPosterCard).join('');
+    }
+
+    function filterAnime() {
+      var q = document.getElementById('search-input').value.toLowerCase();
+      var filtered = animeDB.filter(function(a) { return a.title.toLowerCase().indexOf(q) !== -1; });
+      document.getElementById('search-results').innerHTML = filtered.map(createPosterCard).join('');
+    }
+
+    function openPlayer(title, ep) {
+      document.getElementById('player-modal').classList.add('show');
+      document.getElementById('player-bar-title').textContent = title;
+      document.getElementById('player-anime-title').textContent = title;
+      document.getElementById('player-ep-title').textContent = ep;
+    }
+
+    function closePlayer() { document.getElementById('player-modal').classList.remove('show'); }
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function(){});
+  </script>
+</body>
+</html>
