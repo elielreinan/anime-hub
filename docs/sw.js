@@ -1,10 +1,16 @@
-var CACHE = 'animehub-v4';
-var PRECACHE = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
+var CACHE = 'animehub-v5';
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
     caches.open(CACHE).then(function(cache) {
-      return cache.addAll(PRECACHE);
+      var scope = self.registration.scope;
+      return cache.addAll([
+        scope,
+        scope + 'index.html',
+        scope + 'manifest.json',
+        scope + 'icon-192.png',
+        scope + 'icon-512.png'
+      ]);
     }).then(function() { return self.skipWaiting(); })
   );
 });
@@ -60,7 +66,7 @@ self.addEventListener('fetch', function(e) {
     caches.match(e.request).then(function(cached) {
       return cached || fetch(e.request);
     }).catch(function() {
-      return caches.match('/index.html');
+      return caches.match(self.registration.scope + 'index.html');
     })
   );
 });
