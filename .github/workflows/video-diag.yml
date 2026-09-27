@@ -15,11 +15,16 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund && npm install --no-save --no-audit --no-fund playwright@1
-      - name: Playback end-to-end (real Chrome)
+      - name: Start server
         run: |
-          PORT=3000 node server.js > server.log 2>&1 &
+          nohup env PORT=3000 node server.js > server.log 2>&1 &
           sleep 3
-          node scripts/e2e-play.js
+      - name: Probe
+        if: ${{ contains(github.event.head_commit.message, '[probe]') }}
+        run: node scripts/probe.js
+      - name: Playback end-to-end (real Chrome)
+        if: ${{ !contains(github.event.head_commit.message, '[probe]') }}
+        run: node scripts/e2e-play.js
       - name: Server log
         if: always()
         run: tail -40 server.log
