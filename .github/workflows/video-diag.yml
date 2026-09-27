@@ -1,8 +1,6 @@
 name: video-diag
 
 on:
-  push:
-    branches: [claude/bold-wright-noyldb]
   workflow_dispatch:
     inputs:
       app_url:
