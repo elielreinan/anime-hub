@@ -1,16 +1,14 @@
 // ── Release calendar (Jikan / MyAnimeList) ──
 // Broadcast times are in Japan time; shows are regrouped by the viewer's own weekday.
-var CAL_API_DAYS = ['sundays', 'mondays', 'tuesdays', 'wednesdays', 'thursdays', 'fridays', 'saturdays'];
+// Jikan's filter takes singular day names (the broadcast.day it returns is plural).
+var CAL_API_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 var CAL_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 var CAL_TTL = 12 * 60 * 60 * 1000;
 var calendarItems = null, calendarLoading = null, calendarDay = new Date().getDay();
 
+// Goes through jikanGet (discover.js): one shared, rate-limited queue for all Jikan calls.
 function jikanPage(day, page) {
-  return fetch('https://api.jikan.moe/v4/schedules?filter=' + day + '&sfw=true&page=' + page).then(function(r) {
-    if (r.status === 429) return new Promise(function(res) { setTimeout(res, 1500); }).then(function() { return jikanPage(day, page); });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  });
+  return jikanGet('/schedules?filter=' + day + '&sfw=true&limit=25&page=' + page);
 }
 
 // Local weekday and "HH:MM" for a JST weekday + time.
@@ -25,16 +23,18 @@ function jstToLocal(jstDay, time) {
   return { day: d.getDay(), time: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) };
 }
 
-function fetchCalendar() {
-  var cached = getStore('calendar');
-  if (cached.at && Date.now() - cached.at < CAL_TTL && cached.items) return Promise.resolve(cached.items);
-  var items = [], seen = {};
+// Days are fetched one after another; a failed page is skipped instead of losing
+// the whole week, and what already arrived is shown while the rest loads.
+function fetchCalendar(onProgress) {
+  var cached = getStore('calendar2');
+  if (cached.at && Date.now() - cached.at < CAL_TTL && cached.items && cached.items.length) return Promise.resolve(cached.items);
+  var items = [], seen = {}, failures = 0, done = 0;
   var chain = Promise.resolve();
   CAL_API_DAYS.forEach(function(day, jstDay) {
     [1, 2, 3].forEach(function(page) {
       chain = chain.then(function(more) {
         if (page > 1 && !more) return false;
-        return new Promise(function(res) { setTimeout(res, 400); }).then(function() { return jikanPage(day, page); }).then(function(json) {
+        return jikanPage(day, page).then(function(json) {
           (json.data || []).forEach(function(a) {
             if (seen[a.mal_id]) return;
             var when = jstToLocal(jstDay, a.broadcast && a.broadcast.time);
@@ -44,12 +44,14 @@ function fetchCalendar() {
               day: when.day, time: when.time, eps: a.episodes || 0, score: a.score || 0 });
           });
           return !!(json.pagination && json.pagination.has_next_page);
-        });
+        }, function() { failures++; return false; });
       });
     });
+    chain = chain.then(function() { done++; if (onProgress) onProgress(items, done); });
   });
   return chain.then(function() {
-    setStore('calendar', { at: Date.now(), items: items });
+    if (!items.length) throw new Error('empty');
+    if (!failures) setStore('calendar2', { at: Date.now(), items: items });
     return items;
   });
 }
@@ -57,13 +59,18 @@ function fetchCalendar() {
 function loadCalendar() {
   renderCalendarDays();
   if (calendarItems) { renderCalendar(); return; }
-  document.getElementById('cal-list').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Carregando lançamentos...</div>';
+  document.getElementById('cal-list').innerHTML = '<div class="empty-state">Carregando lançamentos...</div>';
   if (!calendarLoading) {
-    calendarLoading = fetchCalendar().then(function(items) {
+    calendarLoading = fetchCalendar(function(partial, days) {
+      calendarItems = partial.slice();
+      renderCalendar();
+      if (days < 7) document.getElementById('cal-list').insertAdjacentHTML('beforeend', '<div class="empty-state">Carregando o resto da semana (' + days + '/7)...</div>');
+    }).then(function(items) {
       calendarItems = items;
       renderCalendar();
     }).catch(function() {
-      document.getElementById('cal-list').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Não foi possível carregar a agenda agora.</div>';
+      calendarItems = null;
+      document.getElementById('cal-list').innerHTML = '<div class="empty-state">Não foi possível carregar a agenda agora.<div class="profile-actions"><button class="party-btn ghost" onclick="loadCalendar()">Tentar de novo</button></div></div>';
     }).then(function() { calendarLoading = null; });
   }
 }

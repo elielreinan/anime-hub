@@ -144,6 +144,27 @@ async function partyCase(browser, title, ep) {
   return ok;
 }
 
+// Agenda (week + season) and filtered search, all fed by Jikan / MyAnimeList.
+async function discoverCase(browser) {
+  const page = await browser.newPage({ viewport: { width: 390, height: 820 } });
+  const errs = [];
+  page.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 120)); });
+  await openApp(page, APP);
+  await page.evaluate(() => { localStorage.removeItem('ah_calendar2'); switchTab('calendar'); });
+  const week = await page.waitForFunction(() => document.querySelectorAll('#cal-list .cal-item').length > 0, null, { timeout: 90000 }).then(() => true, () => false);
+  const weekCount = await page.evaluate(() => (calendarItems || []).length);
+  await page.evaluate(() => switchCalendarView('now'));
+  const season = await page.waitForFunction(() => document.querySelectorAll('#cal-season .poster-card').length > 0, null, { timeout: 60000 }).then(() => true, () => false);
+  const seasonCount = await page.evaluate(() => document.querySelectorAll('#cal-season .poster-card').length);
+  await page.evaluate(() => { switchTab('explore'); document.getElementById('f-status').value = 'airing'; doSearch(); });
+  const filtered = await page.waitForFunction(() => document.querySelectorAll('#search-results .poster-card').length > 0, null, { timeout: 60000 }).then(() => true, () => false);
+  const ok = week && season && filtered;
+  console.log('\ndiscover [' + ENGINE + ']: week=' + week + ' (' + weekCount + ' shows) season=' + season + ' (' + seasonCount + ') filtered search=' + filtered + ' => ' + (ok ? 'OK' : 'FAIL'));
+  if (!ok) console.log('   status: ' + await page.evaluate(() => document.getElementById('cal-list').innerText.slice(0, 120)) + ' | console: ' + errs.slice(-3).join(' | '));
+  await page.close();
+  return ok;
+}
+
 (async () => {
   const browser = ENGINE === 'webkit'
     ? await webkit.launch()
@@ -152,7 +173,9 @@ async function partyCase(browser, title, ep) {
   const cases = process.env.ONLY === 'party' ? [] : CASES;
   for (const [title, ep] of cases) if (!(await runCase(browser, title, ep))) failed++;
   if (!(await partyCase(browser, 'Naruto Shippuden (Naruto Shippuuden)', 451))) failed++;
+  const extra = process.env.ONLY === 'party' ? 0 : 1;
+  if (extra && !(await discoverCase(browser))) failed++;
   await browser.close();
-  console.log('\n' + (cases.length + 1 - failed) + '/' + (cases.length + 1) + ' checks passing');
+  console.log('\n' + (cases.length + 1 + extra - failed) + '/' + (cases.length + 1 + extra) + ' checks passing');
   process.exitCode = failed ? 1 : 0;
 })();
