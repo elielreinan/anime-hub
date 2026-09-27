@@ -4,6 +4,8 @@ var https = require('https');
 var fs = require('fs');
 var path = require('path');
 var crypto = require('crypto');
+var dns = require('dns');
+var net = require('net');
 
 var PORT = process.env.PORT || 3000;
 var STATIC_DIR = path.join(__dirname, 'docs');
@@ -27,12 +29,74 @@ var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 
 // ── Utility Functions ───────────────────────────────────────────────────────
 
+// The proxies take URLs from the browser, so outbound requests may only reach
+// public addresses: never this machine or Render's private network.
+function isPrivateAddress(ip) {
+  if (net.isIPv6(ip)) {
+    var mapped = ip.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+    if (mapped) return isPrivateAddress(mapped[1]);
+    var hex = ip.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i);
+    if (hex) {
+      var hi = parseInt(hex[1], 16), lo = parseInt(hex[2], 16);
+      return isPrivateAddress([hi >> 8, hi & 255, lo >> 8, lo & 255].join('.'));
+    }
+    var h = ip.toLowerCase();
+    return h === '::' || h === '::1' || /^f[cd]/.test(h) || /^fe[89ab]/.test(h) || /^ff/.test(h);
+  }
+  var p = ip.split('.').map(Number);
+  return p[0] === 0 || p[0] === 10 || p[0] === 127 || p[0] >= 224 ||
+    (p[0] === 100 && p[1] >= 64 && p[1] < 128) ||
+    (p[0] === 169 && p[1] === 254) ||
+    (p[0] === 172 && p[1] >= 16 && p[1] < 32) ||
+    (p[0] === 192 && p[1] === 168);
+}
+
+function blockedError() {
+  var e = new Error('Blocked address');
+  e.code = 'EBLOCKED';
+  return e;
+}
+
+// dns.lookup replacement for http(s) requests; also covers redirects and DNS rebinding.
+function publicLookup(hostname, options, callback) {
+  dns.lookup(hostname, options, function(err, address, family) {
+    if (err) return callback(err);
+    var list = Array.isArray(address) ? address : [{ address: address }];
+    if (list.some(function(a) { return isPrivateAddress(a.address); })) return callback(blockedError());
+    callback(null, address, family);
+  });
+}
+
+// Parsed http(s) URL that may be fetched, or null.
+function publicUrl(raw) {
+  var u;
+  try { u = new URL(raw); } catch (e) { return null; }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+  var host = u.hostname.replace(/^\[|\]$/g, '');
+  if (net.isIP(host) && isPrivateAddress(host)) return null;
+  return u;
+}
+
+// Upstream bodies are served from this origin: never let them run as a page.
+function safeProxyType(ct, fallback) {
+  if (!ct || /html|xml|javascript|ecmascript|svg/i.test(ct)) return fallback;
+  return ct;
+}
+var PROXY_SAFETY_HEADERS = { 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox" };
+
+function proxyHeaders(headers) {
+  Object.keys(PROXY_SAFETY_HEADERS).forEach(function(k) { headers[k] = PROXY_SAFETY_HEADERS[k]; });
+  return headers;
+}
+
 function fetchUrl(targetUrl, maxRedirects, timeoutMs, extraHeaders) {
   if (maxRedirects === undefined) maxRedirects = 5;
   return new Promise(function(resolve, reject) {
     if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
+    if (!publicUrl(targetUrl)) return reject(blockedError());
     var mod = targetUrl.startsWith('https') ? https : http;
     var options = {
+      lookup: publicLookup,
       headers: {
         'User-Agent': USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -44,11 +108,9 @@ function fetchUrl(targetUrl, maxRedirects, timeoutMs, extraHeaders) {
 
     var req = mod.get(targetUrl, options, function(res) {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        var loc = res.headers.location;
-        if (loc.startsWith('/')) {
-          var u = new URL(targetUrl);
-          loc = u.protocol + '//' + u.host + loc;
-        }
+        res.resume();
+        var loc;
+        try { loc = new URL(res.headers.location, targetUrl).toString(); } catch (e) { return reject(e); }
         return fetchUrl(loc, maxRedirects - 1, timeoutMs, extraHeaders).then(resolve).catch(reject);
       }
       var chunks = [];
@@ -212,7 +274,7 @@ function postForm(targetUrl, body, referer, extraHeaders) {
     Object.keys(extraHeaders || {}).forEach(function(k) {
       if (extraHeaders[k] === null) delete headers[k]; else headers[k] = extraHeaders[k];
     });
-    var req = https.request({ method: 'POST', hostname: u.hostname, path: u.pathname + u.search, headers: headers }, function(res) {
+    var req = https.request({ method: 'POST', hostname: u.hostname, path: u.pathname + u.search, headers: headers, lookup: publicLookup }, function(res) {
       var chunks = [];
       res.on('data', function(c) { chunks.push(c); });
       res.on('end', function() { resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }); });
@@ -556,7 +618,7 @@ function findEpisodeEmbeds(title, episode, lang) {
 function handleHLSProxy(urlObj, res) {
   var hlsUrl = urlObj.searchParams.get('url');
   var referer = urlObj.searchParams.get('referer') || '';
-  if (!hlsUrl) { res.writeHead(400); res.end('Missing url'); return; }
+  if (!hlsUrl || !publicUrl(hlsUrl)) { res.writeHead(400); res.end('Invalid url'); return; }
 
   fetchUrl(hlsUrl, 5, 20000, referer ? { Referer: referer } : null).then(function(result) {
     if (result.status >= 400) {
@@ -568,8 +630,8 @@ function handleHLSProxy(urlObj, res) {
     var content = result.body.toString();
     // Not an m3u8 manifest - just proxy the binary data (TS segment, key, etc.)
     if (content.indexOf('#EXTM3U') === -1) {
-      var ct = result.headers['content-type'] || 'video/mp2t';
-      res.writeHead(200, { 'Content-Type': ct, 'Access-Control-Allow-Origin': '*' });
+      var ct = safeProxyType(result.headers['content-type'], 'video/mp2t');
+      res.writeHead(200, proxyHeaders({ 'Content-Type': ct, 'Access-Control-Allow-Origin': '*' }));
       res.end(result.body);
       return;
     }
@@ -591,92 +653,63 @@ function handleHLSProxy(urlObj, res) {
       return proxied(trimmed);
     });
 
-    res.writeHead(200, {
+    res.writeHead(200, proxyHeaders({
       'Content-Type': 'application/vnd.apple.mpegurl',
       'Access-Control-Allow-Origin': '*',
       'Cache-Control': 'no-cache'
-    });
+    }));
     res.end(rewritten.join('\n'));
   }).catch(function(err) {
     console.error('[HLS-Proxy] Error:', err.message);
-    sendJSON(res, 502, { error: true, message: 'HLS proxy: ' + err.message });
+    sendJSON(res, err.code === 'EBLOCKED' ? 400 : 502, { error: true, message: 'HLS proxy: ' + err.message });
   });
 }
 
 // ── Video Proxy Module ──────────────────────────────────────────────────────
 
-// /api/proxy?url= - HTML/embed CORS proxy
-function handleCORSProxy(urlObj, res) {
-  var videoUrl = urlObj.searchParams.get('url');
-  if (!videoUrl) {
-    res.writeHead(400);
-    res.end('Missing url param');
-    return;
-  }
-
-  fetchUrl(videoUrl).then(function(result) {
-    var ct = result.headers['content-type'] || 'text/html';
-    var headers = { 'Content-Type': ct, 'Access-Control-Allow-Origin': '*' };
-    if (result.headers['content-length']) headers['Content-Length'] = result.headers['content-length'];
-
-    if (ct.includes('text/html')) {
-      var html = result.body.toString();
-      headers['X-Frame-Options'] = 'ALLOWALL';
-      delete headers['Content-Length'];
-      res.writeHead(200, headers);
-      res.end(html);
-    } else {
-      res.writeHead(result.status, headers);
-      res.end(result.body);
-    }
-  }).catch(function(err) {
-    sendJSON(res, 502, { error: true, message: err.message });
-  });
-}
-
 // /api/embed-proxy?url= - stream proxy for large video files
 function handleStreamProxy(req, urlObj, res) {
   var embedUrl = urlObj.searchParams.get('url');
   var customReferer = urlObj.searchParams.get('referer');
-  if (!embedUrl) {
+  var target = embedUrl && publicUrl(embedUrl);
+  if (!target) {
     res.writeHead(400);
-    res.end('Missing url param');
+    res.end('Invalid url');
     return;
   }
 
-  var referer = customReferer || '';
-  if (!referer) {
-    try { referer = new URL(embedUrl).origin + '/'; } catch(e) { referer = 'https://animesonlinecc.to/'; }
-  }
-
-  var mod = embedUrl.startsWith('https') ? https : http;
+  var referer = customReferer || target.origin + '/';
+  var mod = target.protocol === 'https:' ? https : http;
   var headers = {
     'User-Agent': USER_AGENT,
     'Referer': referer
   };
   if (req.headers.range) headers['Range'] = req.headers.range;
 
-  var proxyReq = mod.get(embedUrl, { headers: headers }, function(proxyRes) {
+  var proxyReq = mod.get(target, { headers: headers, lookup: publicLookup }, function(proxyRes) {
     if (proxyRes.statusCode >= 300 && proxyRes.statusCode < 400 && proxyRes.headers.location) {
+      proxyRes.resume();
+      var next;
+      try { next = new URL(proxyRes.headers.location, target).toString(); } catch (e) { res.writeHead(502); res.end('Bad redirect'); return; }
       res.writeHead(302, {
-        'Location': '/api/embed-proxy?url=' + encodeURIComponent(proxyRes.headers.location),
+        'Location': '/api/embed-proxy?url=' + encodeURIComponent(next) + (customReferer ? '&referer=' + encodeURIComponent(customReferer) : ''),
         'Access-Control-Allow-Origin': '*'
       });
       res.end();
       return;
     }
-    var respHeaders = {
-      'Content-Type': proxyRes.headers['content-type'] || 'video/mp4',
+    var respHeaders = proxyHeaders({
+      'Content-Type': safeProxyType(proxyRes.headers['content-type'], 'video/mp4'),
       'Access-Control-Allow-Origin': '*',
       'Accept-Ranges': 'bytes'
-    };
+    });
     if (proxyRes.headers['content-length']) respHeaders['Content-Length'] = proxyRes.headers['content-length'];
     if (proxyRes.headers['content-range']) respHeaders['Content-Range'] = proxyRes.headers['content-range'];
     res.writeHead(proxyRes.statusCode, respHeaders);
     proxyRes.pipe(res);
   });
-  proxyReq.on('error', function() {
-    try { res.writeHead(502); res.end('Proxy error'); } catch (e) { /* already sent */ }
+  proxyReq.on('error', function(err) {
+    try { res.writeHead(err.code === 'EBLOCKED' ? 400 : 502); res.end('Proxy error'); } catch (e) { /* already sent */ }
   });
   proxyReq.setTimeout(60000, function() { proxyReq.destroy(); });
 }
@@ -889,12 +922,6 @@ var server = http.createServer(function(req, res) {
     return;
   }
 
-  // Route: /api/proxy?url= - HTML/embed CORS proxy
-  if (pathname === '/api/proxy') {
-    handleCORSProxy(urlObj, res);
-    return;
-  }
-
   // Route: /api/embed-proxy?url= - video stream proxy
   if (pathname === '/api/embed-proxy') {
     handleStreamProxy(req, urlObj, res);
@@ -906,7 +933,7 @@ var server = http.createServer(function(req, res) {
   var fullPath = path.resolve(STATIC_DIR, '.' + filePath);
 
   // Security: prevent path traversal
-  if (!fullPath.startsWith(STATIC_DIR)) {
+  if (fullPath !== STATIC_DIR && !fullPath.startsWith(STATIC_DIR + path.sep)) {
     res.writeHead(403);
     res.end('Forbidden');
     return;
@@ -936,7 +963,6 @@ server.listen(PORT, function() {
   console.log('  GET /api/episode/:slug/:ep[?title=]  - find player embeds');
   console.log('  GET /api/hls-proxy?url=              - HLS manifest proxy');
   console.log('  GET /api/search/:query               - slugify title');
-  console.log('  GET /api/proxy?url=                  - HTML/embed CORS proxy');
   console.log('  GET /api/embed-proxy?url=            - video stream proxy');
   console.log('  GET /api/status                      - server status');
   console.log('  /api/party[/:code[/events|/action]]  - watch party rooms');

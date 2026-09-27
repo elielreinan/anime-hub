@@ -437,8 +437,8 @@
     <div class="page-spacer"></div>
     <div class="profile-header">
       <div class="avatar"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-      <div class="profile-name">Eliel</div>
-      <div class="profile-email">eliel.reiinan@gmail.com</div>
+      <div class="profile-name" id="profile-name">Visitante</div>
+      <div class="profile-email">Seus dados ficam salvos só neste aparelho</div>
     </div>
     <div class="stats-row" id="profile-stats"></div>
     <div class="section-header" style="padding-top:16px"><h2 class="section-title">Minha Lista</h2></div>
@@ -1400,15 +1400,17 @@
       var s = getStore('settings');
       s[key] = value;
       setStore('settings', s);
+      if (key === 'nickname') renderProfileName();
     }
 
     function escapeHtml(s) {
       return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; });
     }
 
-    function getDefaultNickname() {
-      var el = document.querySelector('.profile-name');
-      return (el && el.textContent.trim()) || 'Visitante';
+    function getDefaultNickname() { return 'Visitante'; }
+
+    function renderProfileName() {
+      document.getElementById('profile-name').textContent = getSettings().nickname || getDefaultNickname();
     }
 
     function openSheet(id) { document.getElementById(id).classList.add('show'); }
@@ -1948,7 +1950,7 @@
       { name: 'DragonSlyr', watched: 198, level: 'Senpai', badge: 'senpai', xp: 8540 },
       { name: 'MoonWatcher', watched: 176, level: 'Otaku', badge: 'otaku', xp: 7230 },
       { name: 'AkiraBlaze', watched: 154, level: 'Otaku', badge: 'otaku', xp: 6110 },
-      { name: 'Eliel', watched: 0, level: 'Weeb', badge: 'weeb', xp: 0 },
+      { name: '', you: true, watched: 0, level: 'Weeb', badge: 'weeb', xp: 0 },
       { name: 'ShiroKami', watched: 128, level: 'Otaku', badge: 'otaku', xp: 5200 },
       { name: 'HanamiDream', watched: 112, level: 'Weeb', badge: 'weeb', xp: 4560 },
       { name: 'RyuzenX', watched: 96, level: 'Weeb', badge: 'weeb', xp: 3890 },
@@ -1957,6 +1959,7 @@
     function renderUserRanking() {
       var lists = getUserLists();
       var totalWatched = Object.values(lists).reduce(function(sum, arr) { return sum + (arr ? arr.length : 0); }, 0);
+      mockUsers[6].name = getSettings().nickname || getDefaultNickname();
       mockUsers[6].watched = totalWatched;
       mockUsers[6].xp = totalWatched * 42;
       if (totalWatched > 10) { mockUsers[6].level = 'Otaku'; mockUsers[6].badge = 'otaku'; }
@@ -1969,11 +1972,11 @@
       var SVG_USER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
       document.getElementById('user-ranking-list').innerHTML = sorted.map(function(u, i) {
         var posClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-        var isYou = u.name === 'Eliel';
+        var isYou = !!u.you;
         return '<div class="rank-item" style="' + (isYou ? 'background:rgba(255,90,38,0.08);border-left:3px solid var(--accent)' : '') + '">' +
           '<div class="rank-pos ' + posClass + '">' + (i + 1) + '</div>' +
           '<div class="rank-avatar">' + SVG_USER + '</div>' +
-          '<div class="rank-info"><div class="rank-name">' + u.name + (isYou ? ' <span style="font-size:11px;color:var(--accent)">(você)</span>' : '') + '</div>' +
+          '<div class="rank-info"><div class="rank-name">' + escapeHtml(u.name) + (isYou ? ' <span style="font-size:11px;color:var(--accent)">(você)</span>' : '') + '</div>' +
           '<div class="rank-detail">' + u.watched + ' animes assistidos · <span class="rank-badge ' + u.badge + '">' + u.level + '</span></div></div>' +
           '<div class="rank-score">' + u.xp.toLocaleString() + '<span style="font-size:10px;color:var(--muted);margin-left:2px">XP</span></div></div>';
       }).join('');
@@ -2051,6 +2054,7 @@
       }).join('');
     }
     renderProfileStats();
+    renderProfileName();
 
     function showListDetail(listName) {
       var lists = getUserLists();

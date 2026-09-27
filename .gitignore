@@ -9,9 +9,10 @@ package-lock.json
 .env.development
 .env.production
 
-# IDE
+# IDE / assistant tooling
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
