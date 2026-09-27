@@ -27,7 +27,7 @@ var BLOCKED_GENRES = [
 var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 // Domains with known SSL certificate issues - use relaxed verification
-var RELAXED_SSL_DOMAINS = ['betteranime.net', 'betteranime.com'];
+var RELAXED_SSL_DOMAINS = ['betteranime.net', 'betteranime.com', 'superanimes.biz', 'animesonline.cc'];
 var relaxedAgent = new https.Agent({ rejectUnauthorized: false });
 
 // ── Utility Functions ───────────────────────────────────────────────────────
@@ -586,11 +586,159 @@ function searchBrazilianSites(title, episode) {
     var result = directResult || embedResult;
     if (result) {
       console.log('[BrSites] Found result from:', result.provider, '- type:', result.type);
-    } else {
-      console.log('[BrSites] No results from any Brazilian site');
+      return result;
     }
-    return result;
+
+    console.log('[BrSites] Guess-based URLs failed, trying search-based scraping...');
+    return searchBrazilianSitesViaSearch(title, episode);
   });
+}
+
+// ── Search-based scraping (WordPress-style /?s= search) ────────────────────
+// Sites confirmed reachable (not Cloudflare-blocked) but with unknown URL slugs
+var SEARCH_BASED_SITES = {
+  betteranime: 'https://betteranime.net',
+  animeshouse: 'https://animeshouse.net'
+};
+
+function normalizeForMatch(s) {
+  return s.toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Find candidate anime page links on a search results page, ranked by title word overlap
+function extractSearchResultLinks(html, origin, title) {
+  var linkRegex = /<a[^>]+href=["'](https?:\/\/[^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  var match;
+  var titleWords = normalizeForMatch(title).split(' ').filter(function(w) { return w.length > 1; });
+  var seen = {};
+  var scored = [];
+
+  while ((match = linkRegex.exec(html)) !== null) {
+    var href = match[1];
+    if (href.indexOf(origin) !== 0) continue;
+    if (/\/(page|category|tag|author|feed|wp-|attachment|\?s=)/.test(href)) continue;
+    if (seen[href]) continue;
+
+    var text = match[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    var textNorm = normalizeForMatch(text || href);
+    if (!textNorm) continue;
+
+    var score = 0;
+    titleWords.forEach(function(w) { if (textNorm.indexOf(w) !== -1) score++; });
+    if (score === 0) continue;
+
+    seen[href] = true;
+    scored.push({ href: href, text: text, score: score });
+  }
+
+  scored.sort(function(a, b) { return b.score - a.score; });
+  return scored.map(function(s) { return s.href; });
+}
+
+function searchSiteAnimePage(baseUrl, title, providerName) {
+  var searchUrl = baseUrl + '/?s=' + encodeURIComponent(title);
+  console.log('[' + providerName + '] Search:', searchUrl);
+  return fetchUrl(searchUrl).then(function(result) {
+    if (result.status >= 400) return null;
+    var origin = new URL(baseUrl).origin;
+    var candidates = extractSearchResultLinks(result.body.toString(), origin, title);
+    return candidates.length > 0 ? candidates[0] : null;
+  }).catch(function(err) {
+    console.log('[' + providerName + '] Search error:', err.message);
+    return null;
+  });
+}
+
+// Find the episode link on an anime's page matching the given episode number
+function findEpisodeLink(animePageUrl, episode) {
+  return fetchUrl(animePageUrl).then(function(result) {
+    if (result.status >= 400) return null;
+    var html = result.body.toString();
+    var origin;
+    try { origin = new URL(animePageUrl).origin; } catch (e) { origin = ''; }
+
+    var epPatterns = [
+      new RegExp('episodio[-_]?0*' + episode + '(?:[^0-9]|$)', 'i'),
+      new RegExp('epis[oó]dio\\s*0*' + episode + '(?:[^0-9]|$)', 'i'),
+      new RegExp('ep[-_]?0*' + episode + '(?:[^0-9]|$)', 'i'),
+      new RegExp('cap[ií]tulo\\s*0*' + episode + '(?:[^0-9]|$)', 'i')
+    ];
+
+    var linkRegex = /<a[^>]+href=["'](https?:\/\/[^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+    var match;
+    while ((match = linkRegex.exec(html)) !== null) {
+      var href = match[1];
+      if (origin && href.indexOf(origin) !== 0) continue;
+      var text = match[2].replace(/<[^>]+>/g, ' ').trim();
+      var hay = href + ' ' + text;
+      for (var i = 0; i < epPatterns.length; i++) {
+        if (epPatterns[i].test(hay)) return href;
+      }
+    }
+    return null;
+  }).catch(function() { return null; });
+}
+
+// Full pipeline: search for anime -> find episode -> extract video
+function searchAndScrapeSite(baseUrl, title, episode, providerName) {
+  return searchSiteAnimePage(baseUrl, title, providerName).then(function(animeUrl) {
+    if (!animeUrl) {
+      console.log('[' + providerName + '] search: no anime match for "' + title + '"');
+      return null;
+    }
+    console.log('[' + providerName + '] matched anime page:', animeUrl);
+
+    return findEpisodeLink(animeUrl, episode).then(function(epUrl) {
+      if (!epUrl) {
+        console.log('[' + providerName + '] no episode link found for ep', episode);
+        return null;
+      }
+      console.log('[' + providerName + '] episode url:', epUrl);
+
+      return fetchUrl(epUrl).then(function(result) {
+        if (result.status >= 400) return null;
+        var sources = extractVideoFromPage(result.body.toString());
+        var origin = '';
+        try { origin = new URL(epUrl).origin + '/'; } catch (e) {}
+
+        if (sources.videos.length > 0) {
+          return { provider: providerName, video_url: sources.videos[0], type: 'direct',
+            isM3U8: sources.videos[0].indexOf('.m3u8') !== -1, referer: origin };
+        }
+        if (sources.bloggerEmbeds.length > 0) {
+          return resolveBloggerEmbed(sources.bloggerEmbeds[0]).then(function(v) {
+            if (v) return { provider: providerName, video_url: v, type: 'direct', isM3U8: v.indexOf('.m3u8') !== -1 };
+            return { provider: providerName, embed_url: sources.bloggerEmbeds[0], type: 'embed' };
+          });
+        }
+        if (sources.embeds.length > 0) {
+          return resolveEmbedUrl(sources.embeds[0]).then(function(v) {
+            if (v) return { provider: providerName, video_url: v, type: 'direct', isM3U8: v.indexOf('.m3u8') !== -1 };
+            return { provider: providerName, embed_url: sources.embeds[0], type: 'embed' };
+          });
+        }
+        return null;
+      }).catch(function() { return null; });
+    });
+  }).catch(function() { return null; });
+}
+
+function searchBrazilianSitesViaSearch(title, episode) {
+  var names = Object.keys(SEARCH_BASED_SITES);
+  var idx = 0;
+  function next() {
+    if (idx >= names.length) return Promise.resolve(null);
+    var name = names[idx++];
+    return searchAndScrapeSite(SEARCH_BASED_SITES[name], title, episode, name).then(function(r) {
+      if (r) return r;
+      return next();
+    });
+  }
+  return next();
 }
 
 // ── Consumet Video Provider (@consumet/extensions) ─────────────────────────
@@ -828,13 +976,23 @@ function handleDebugVideo(title, episode, res) {
       .catch(function(e) { results.providers.animesonlinecc = { status: 'error', error: e.message }; })
   );
 
-  // Test each Brazilian site individually
+  // Test each Brazilian site individually (guess-based URL patterns)
   var sites = generateBrazilianUrls(title, episode);
   Object.keys(sites).forEach(function(name) {
     promises.push(
       scrapeVideoFromUrls(sites[name], name)
         .then(function(r) { results.providers[name] = r || { status: 'no_results', urls_tried: sites[name] }; })
         .catch(function(e) { results.providers[name] = { status: 'error', error: e.message }; })
+    );
+  });
+
+  // Test search-based scraping (real site search, for sites with unknown URL patterns)
+  Object.keys(SEARCH_BASED_SITES).forEach(function(name) {
+    var key = name + '_search';
+    promises.push(
+      searchAndScrapeSite(SEARCH_BASED_SITES[name], title, episode, key)
+        .then(function(r) { results.providers[key] = r || { status: 'no_results' }; })
+        .catch(function(e) { results.providers[key] = { status: 'error', error: e.message }; })
     );
   });
 
