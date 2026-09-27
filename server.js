@@ -313,6 +313,189 @@ function tryProviders(slugVariants, episode) {
   return next();
 }
 
+// ── Consumet Video Provider (@consumet/extensions) ─────────────────────────
+
+var consumetProviders = null;
+var consumetLoadAttempted = false;
+
+function loadConsumetProviders() {
+  if (consumetProviders) return Promise.resolve(consumetProviders);
+  if (consumetLoadAttempted) return Promise.resolve(null);
+  consumetLoadAttempted = true;
+
+  return import('@consumet/extensions').then(function(mod) {
+    var ANIME = mod.ANIME || (mod.default && mod.default.ANIME);
+    if (!ANIME) {
+      console.error('[Consumet] No ANIME module found');
+      return null;
+    }
+    var providers = [];
+    // AnimeKai first (active), then Hianime as fallback
+    var names = ['AnimeKai', 'Hianime', 'AnimePahe', 'KickAssAnime'];
+    names.forEach(function(name) {
+      if (ANIME[name]) {
+        try {
+          var inst = new ANIME[name]();
+          if (typeof inst.search === 'function' && typeof inst.fetchAnimeInfo === 'function' && typeof inst.fetchEpisodeSources === 'function') {
+            providers.push({ name: name, instance: inst });
+            console.log('[Consumet] Loaded provider:', name);
+          }
+        } catch(e) { /* skip */ }
+      }
+    });
+    if (providers.length === 0) {
+      console.error('[Consumet] No working providers');
+      return null;
+    }
+    consumetProviders = providers;
+    return providers;
+  }).catch(function(err) {
+    console.error('[Consumet] Load failed:', err.message);
+    return null;
+  });
+}
+
+function normalizeTitle(title) {
+  return title
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+(Dublado|Legendado|PT-PT|PT-BR)\s*/gi, ' ')
+    .replace(/\s+(Season|Temporada)\s+\d+/gi, '')
+    .replace(/\s+\d+(st|nd|rd|th)\s+Season/gi, '')
+    .replace(/\s*[-–—]\s*\d+ª?\s*Temporada/gi, '')
+    .trim();
+}
+
+function searchConsumetVideo(title, episode) {
+  return loadConsumetProviders().then(function(providers) {
+    if (!providers || providers.length === 0) return null;
+
+    var epNum = parseInt(episode);
+    var searchTitle = normalizeTitle(title);
+    var providerIdx = 0;
+
+    function tryNextProvider() {
+      if (providerIdx >= providers.length) return Promise.resolve(null);
+      var prov = providers[providerIdx++];
+      console.log('[Consumet] Trying provider:', prov.name, 'for:', searchTitle, 'ep', episode);
+
+      return prov.instance.search(searchTitle).then(function(results) {
+        if (!results || !results.results || results.results.length === 0) {
+          console.log('[Consumet]', prov.name, '- no search results');
+          return tryNextProvider();
+        }
+        var animeId = results.results[0].id;
+        console.log('[Consumet]', prov.name, '- match:', animeId, '(' + (results.results[0].title || '') + ')');
+        return prov.instance.fetchAnimeInfo(animeId);
+      }).then(function(info) {
+        if (!info || !info.episodes || info.episodes.length === 0) {
+          console.log('[Consumet]', prov.name, '- no episodes');
+          return tryNextProvider();
+        }
+        var ep = info.episodes.find(function(e) { return e.number === epNum; });
+        if (!ep) ep = info.episodes[epNum - 1];
+        if (!ep) {
+          console.log('[Consumet]', prov.name, '- ep', episode, 'not found (has', info.episodes.length, ')');
+          return tryNextProvider();
+        }
+        console.log('[Consumet]', prov.name, '- fetching sources for:', ep.id);
+        return prov.instance.fetchEpisodeSources(ep.id);
+      }).then(function(sources) {
+        if (!sources || !sources.sources || sources.sources.length === 0) {
+          console.log('[Consumet]', prov.name, '- no video sources');
+          return tryNextProvider();
+        }
+        var best = sources.sources.find(function(s) { return s.quality === '1080p'; }) ||
+                   sources.sources.find(function(s) { return s.quality === '720p'; }) ||
+                   sources.sources.find(function(s) { return s.quality === 'default'; }) ||
+                   sources.sources[0];
+        var isHLS = (best.isM3U8 === true) || (best.url && best.url.indexOf('.m3u8') !== -1);
+        var referer = (sources.headers && sources.headers.Referer) ? sources.headers.Referer : '';
+
+        console.log('[Consumet]', prov.name, '- found video:', best.quality || 'default', isHLS ? 'HLS' : 'MP4');
+        return {
+          provider: prov.name.toLowerCase(),
+          video_url: best.url,
+          type: 'direct',
+          isM3U8: isHLS,
+          quality: best.quality || 'default',
+          referer: referer
+        };
+      }).catch(function(err) {
+        console.log('[Consumet]', prov.name, '- error:', err.message);
+        return tryNextProvider();
+      });
+    }
+
+    return tryNextProvider();
+  });
+}
+
+// Pre-load consumet providers at startup (non-blocking)
+loadConsumetProviders();
+
+// ── HLS Proxy ──────────────────────────────────────────────────────────────
+
+function handleHLSProxy(urlObj, res) {
+  var hlsUrl = urlObj.searchParams.get('url');
+  var referer = urlObj.searchParams.get('referer') || '';
+  if (!hlsUrl) { res.writeHead(400); res.end('Missing url'); return; }
+
+  if (!referer) {
+    try { referer = new URL(hlsUrl).origin + '/'; } catch(e) { referer = ''; }
+  }
+
+  console.log('[HLS-Proxy] Fetching:', hlsUrl.substring(0, 80));
+
+  fetchUrl(hlsUrl).then(function(result) {
+    if (result.status >= 400) {
+      res.writeHead(result.status, { 'Access-Control-Allow-Origin': '*' });
+      res.end('Upstream error: ' + result.status);
+      return;
+    }
+
+    var content = result.body.toString();
+    // Not an m3u8 manifest - just proxy the binary data (TS segment, key, etc.)
+    if (content.indexOf('#EXTM3U') === -1 && !hlsUrl.match(/\.m3u8/i)) {
+      var ct = result.headers['content-type'] || 'video/mp2t';
+      res.writeHead(200, { 'Content-Type': ct, 'Access-Control-Allow-Origin': '*' });
+      res.end(result.body);
+      return;
+    }
+
+    var baseUrl = hlsUrl.substring(0, hlsUrl.lastIndexOf('/') + 1);
+    var refParam = referer ? '&referer=' + encodeURIComponent(referer) : '';
+
+    var lines = content.split('\n');
+    var rewritten = lines.map(function(line) {
+      var trimmed = line.trim();
+      if (!trimmed) return line;
+
+      // Rewrite URI= inside tags (encryption keys, init segments)
+      if (trimmed.startsWith('#')) {
+        return line.replace(/URI="([^"]+)"/g, function(match, uri) {
+          var absUrl = uri.startsWith('http') ? uri : baseUrl + uri;
+          var proxy = uri.indexOf('.m3u8') !== -1 ? '/api/hls-proxy' : '/api/hls-proxy';
+          return 'URI="' + proxy + '?url=' + encodeURIComponent(absUrl) + refParam + '"';
+        });
+      }
+
+      // URL line (segment or sub-manifest)
+      var absUrl = trimmed.startsWith('http') ? trimmed : baseUrl + trimmed;
+      return '/api/hls-proxy?url=' + encodeURIComponent(absUrl) + refParam;
+    });
+
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.apple.mpegurl',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-cache'
+    });
+    res.end(rewritten.join('\n'));
+  }).catch(function(err) {
+    console.error('[HLS-Proxy] Error:', err.message);
+    sendJSON(res, 502, { error: true, message: 'HLS proxy: ' + err.message });
+  });
+}
+
 // ── Video Proxy Module ──────────────────────────────────────────────────────
 
 // /api/proxy?url= - HTML/embed CORS proxy
@@ -347,16 +530,22 @@ function handleCORSProxy(urlObj, res) {
 // /api/embed-proxy?url= - stream proxy for large video files
 function handleStreamProxy(req, urlObj, res) {
   var embedUrl = urlObj.searchParams.get('url');
+  var customReferer = urlObj.searchParams.get('referer');
   if (!embedUrl) {
     res.writeHead(400);
     res.end('Missing url param');
     return;
   }
 
+  var referer = customReferer || '';
+  if (!referer) {
+    try { referer = new URL(embedUrl).origin + '/'; } catch(e) { referer = 'https://animesonlinecc.to/'; }
+  }
+
   var mod = embedUrl.startsWith('https') ? https : http;
   var headers = {
     'User-Agent': USER_AGENT,
-    'Referer': 'https://animesonlinecc.to/'
+    'Referer': referer
   };
   if (req.headers.range) headers['Range'] = req.headers.range;
 
@@ -405,6 +594,12 @@ var server = http.createServer(function(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
+  // Route: /api/hls-proxy?url= - HLS manifest proxy
+  if (pathname === '/api/hls-proxy') {
+    handleHLSProxy(urlObj, res);
+    return;
+  }
+
   // Route: /api/atv-video/:videoId - AnimeTV video decryption
   if (pathname.startsWith('/api/atv-video/')) {
     var videoId = pathname.replace('/api/atv-video/', '');
@@ -422,11 +617,12 @@ var server = http.createServer(function(req, res) {
     return;
   }
 
-  // Route: /api/episode/:slug/:episode - episode search with ATV priority
+  // Route: /api/episode/:slug/:episode - episode search with multi-provider fallback
   if (pathname.startsWith('/api/episode/')) {
     var parts = pathname.split('/').filter(Boolean);
     var slug = decodeURIComponent(parts[2] || '');
     var episode = parts[3] || '1';
+    var title = urlObj.searchParams.get('title') || slug.replace(/-/g, ' ');
 
     // Generate slug variants for AnimesOnlineCC fallback
     var variants = [slug];
@@ -441,10 +637,9 @@ var server = http.createServer(function(req, res) {
     variants.push(slug + '-legendado');
     variants.push(slug + '-dublado');
 
-    console.log('[Episode] Searching slug="' + slug + '" ep=' + episode);
+    console.log('[Episode] Searching title="' + title + '" slug="' + slug + '" ep=' + episode);
 
     // Priority 1: Try AnimeTV decrypted video (if we have an ATV video ID)
-    // The video ID can be passed as a query param: ?atv_id=XXX
     var atvId = urlObj.searchParams.get('atv_id');
     var atvPromise;
 
@@ -454,47 +649,47 @@ var server = http.createServer(function(req, res) {
         try {
           var raw = JSON.parse(result.body.toString());
           var data = Array.isArray(raw) ? raw[0] : raw;
-          // New API: direct URL fields
-          var directUrl = data && (data.locationhd || data.locationsd || data.location);
+          var directUrl = data && ((data.locationhd && data.locationhd.length > 5 && data.locationhd) ||
+                                   (data.locationsd && data.locationsd.length > 5 && data.locationsd) ||
+                                   (data.location && data.location.length > 5 && data.location));
           if (directUrl) {
-            return {
-              provider: 'animetv', slug: slug, episode: episode,
-              video_url: directUrl, type: 'direct'
-            };
+            return { provider: 'animetv', video_url: directUrl, type: 'direct' };
           }
-          // Legacy: encrypted field
-          var encField = data && data.mS9wR2qY7pK7vX5n;
-          if (encField) {
-            var videoUrl = decryptATVVideo(encField);
-            if (videoUrl) {
-              return {
-                provider: 'animetv', slug: slug, episode: episode,
-                video_url: videoUrl, type: 'direct'
-              };
-            }
-          }
-        } catch (e) { /* parse error, fall through */ }
+        } catch (e) { /* fall through */ }
         return null;
       }).catch(function() { return null; });
     } else {
       atvPromise = Promise.resolve(null);
     }
 
-    // Try ATV first, then fall back to AnimesOnlineCC
     atvPromise.then(function(atvResult) {
       if (atvResult) {
+        console.log('[Episode] ATV video found');
         sendJSON(res, 200, { error: false, data: atvResult });
         return;
       }
-      // Priority 2: AnimesOnlineCC scraping fallback
-      return tryProviders(variants, episode).then(function(result) {
-        if (result) {
-          sendJSON(res, 200, { error: false, data: result });
-        } else {
-          sendJSON(res, 404, { error: true, message: 'Episode not found', tried: variants });
+
+      // Priority 2: Consumet providers (AnimeKai, Hianime, etc.)
+      console.log('[Episode] ATV failed, trying Consumet providers...');
+      return searchConsumetVideo(title, episode).then(function(consumetResult) {
+        if (consumetResult) {
+          console.log('[Episode] Consumet found video via', consumetResult.provider);
+          sendJSON(res, 200, { error: false, data: consumetResult });
+          return;
         }
+
+        // Priority 3: AnimesOnlineCC scraping fallback
+        console.log('[Episode] Consumet failed, trying AnimesOnlineCC...');
+        return tryProviders(variants, episode).then(function(result) {
+          if (result) {
+            sendJSON(res, 200, { error: false, data: result });
+          } else {
+            sendJSON(res, 404, { error: true, message: 'Episode not found on any provider', tried: variants });
+          }
+        });
       });
     }).catch(function(err) {
+      console.error('[Episode] Error:', err.message);
       sendJSON(res, 500, { error: true, message: err.message });
     });
     return;
@@ -550,10 +745,12 @@ var server = http.createServer(function(req, res) {
 server.listen(PORT, function() {
   console.log('AnimeHub server running at http://localhost:' + PORT);
   console.log('API Routes:');
-  console.log('  GET /api/atv-video/:videoId        - decrypt AnimeTV video URL');
-  console.log('  GET /api/atv/*                     - AnimeTV API proxy (filtered)');
-  console.log('  GET /api/episode/:slug/:ep[?atv_id] - episode search (ATV + fallback)');
-  console.log('  GET /api/search/:query              - slugify title');
-  console.log('  GET /api/proxy?url=                 - HTML/embed CORS proxy');
-  console.log('  GET /api/embed-proxy?url=           - video stream proxy');
+  console.log('  GET /api/atv-video/:videoId          - AnimeTV video URL');
+  console.log('  GET /api/atv/*                       - AnimeTV API proxy (filtered)');
+  console.log('  GET /api/episode/:slug/:ep[?title=]  - multi-provider video search');
+  console.log('  GET /api/hls-proxy?url=              - HLS manifest proxy');
+  console.log('  GET /api/search/:query               - slugify title');
+  console.log('  GET /api/proxy?url=                  - HTML/embed CORS proxy');
+  console.log('  GET /api/embed-proxy?url=            - video stream proxy');
+  console.log('Video providers: AnimeTV -> Consumet (AnimeKai/Hianime) -> AnimesOnlineCC');
 });

@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v5';
+var CACHE = 'animehub-v6';
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
