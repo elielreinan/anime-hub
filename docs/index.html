@@ -1440,7 +1440,13 @@
     updateOnlineStatus();
 
     // ── Service Worker ──
-    if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function() {});
+    if ('serviceWorker' in navigator) {
+      var hadController = !!navigator.serviceWorker.controller;
+      navigator.serviceWorker.addEventListener('controllerchange', function() {
+        if (hadController && !window._swReloaded) { window._swReloaded = true; location.reload(); }
+      });
+      navigator.serviceWorker.register('sw.js').catch(function() {});
+    }
   </script>
 </body>
 </html>

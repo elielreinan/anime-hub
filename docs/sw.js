@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v9';
+var CACHE = 'animehub-v10';
 
 self.addEventListener('install', function(e) {
   e.waitUntil(
@@ -55,6 +55,22 @@ self.addEventListener('fetch', function(e) {
           return r;
         }).catch(function() {
           return new Response('', { status: 404 });
+        });
+      })
+    );
+    return;
+  }
+
+  // Pages: network first so a new deploy shows up on the next load
+  if (e.request.mode === 'navigate') {
+    e.respondWith(
+      fetch(e.request).then(function(r) {
+        var clone = r.clone();
+        caches.open(CACHE).then(function(c) { c.put(e.request, clone); });
+        return r;
+      }).catch(function() {
+        return caches.match(e.request).then(function(cached) {
+          return cached || caches.match(self.registration.scope + 'index.html');
         });
       })
     );
