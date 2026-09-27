@@ -6,6 +6,7 @@ const { chromium } = require('playwright');
 
 const APP = process.argv[2] || 'http://localhost:3000/';
 const CASES = [
+  ['Super no Ura de Yani Suu Futari', 1],
   ['Death Note', 1],
   ['Naruto Shippuden (Naruto Shippuuden)', 451],
   ['One Piece', 1000],
@@ -70,11 +71,37 @@ async function runCase(browser, title, ep) {
   return ok;
 }
 
+// Two viewers in one room: a seek on A must move B to the same point.
+async function partyCase(browser, title, ep) {
+  const a = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await a.goto(APP, { waitUntil: 'load' });
+  await a.evaluate(([title, ep]) => { currentAnime = { id: 1, category_name: title }; openPlayer(1, ep, 9999); }, [title, ep]);
+  const playing = await a.waitForFunction(() => { const v = document.getElementById('player-video'); return v.style.display !== 'none' && v.currentTime > 1; }, null, { timeout: 120000 }).then(() => true, () => false);
+  if (!playing) { console.log('\nparty: no own-player stream for ' + title); await a.close(); return false; }
+  await a.evaluate(() => createParty());
+  await a.waitForFunction(() => party && document.querySelector('.party-code'), null, { timeout: 30000 });
+  const code = await a.evaluate(() => party.code);
+  const b = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await b.goto(APP + '?party=' + code, { waitUntil: 'load' });
+  await b.waitForFunction(() => document.getElementById('player-video').readyState >= 2, null, { timeout: 120000 }).catch(() => {});
+  await a.waitForFunction(() => party.members === 2, null, { timeout: 30000 }).catch(() => {});
+  await a.evaluate(() => { const v = document.getElementById('player-video'); v.currentTime = 120; v.play(); });
+  await a.waitForTimeout(8000);
+  const ta = await a.evaluate(() => document.getElementById('player-video').currentTime);
+  const tb = await b.evaluate(() => document.getElementById('player-video').currentTime);
+  const ok = Math.abs(ta - tb) < 3 && tb > 100;
+  console.log('\nparty ' + code + ' (' + title + '): A=' + ta.toFixed(1) + 's B=' + tb.toFixed(1) + 's => ' + (ok ? 'OK' : 'FAIL'));
+  await a.close();
+  await b.close();
+  return ok;
+}
+
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', args: ['--autoplay-policy=no-user-gesture-required'] });
   let failed = 0;
   for (const [title, ep] of CASES) if (!(await runCase(browser, title, ep))) failed++;
+  if (!(await partyCase(browser, 'Naruto Shippuden (Naruto Shippuuden)', 451))) failed++;
   await browser.close();
-  console.log('\n' + (CASES.length - failed) + '/' + CASES.length + ' cases playing');
+  console.log('\n' + (CASES.length + 1 - failed) + '/' + (CASES.length + 1) + ' checks passing');
   process.exitCode = failed ? 1 : 0;
 })();

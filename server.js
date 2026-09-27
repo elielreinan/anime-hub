@@ -3,6 +3,7 @@ var http = require('http');
 var https = require('https');
 var fs = require('fs');
 var path = require('path');
+var crypto = require('crypto');
 
 var PORT = process.env.PORT || 3000;
 var STATIC_DIR = path.join(__dirname, 'docs');
@@ -53,7 +54,7 @@ function fetchUrl(targetUrl, maxRedirects, timeoutMs, extraHeaders) {
       var chunks = [];
       res.on('data', function(c) { chunks.push(c); });
       res.on('end', function() {
-        resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) });
+        resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks), url: targetUrl });
       });
     });
     req.on('error', reject);
@@ -197,20 +198,21 @@ function fetchText(url) {
   });
 }
 
-function postForm(targetUrl, body, referer) {
+function postForm(targetUrl, body, referer, extraHeaders) {
   return new Promise(function(resolve, reject) {
     var u = new URL(targetUrl);
-    var req = https.request({
-      method: 'POST', hostname: u.hostname, path: u.pathname + u.search,
-      headers: {
-        'User-Agent': USER_AGENT,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(body),
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': referer,
-        'Accept-Encoding': 'identity'
-      }
-    }, function(res) {
+    var headers = {
+      'User-Agent': USER_AGENT,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(body),
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': referer,
+      'Accept-Encoding': 'identity'
+    };
+    Object.keys(extraHeaders || {}).forEach(function(k) {
+      if (extraHeaders[k] === null) delete headers[k]; else headers[k] = extraHeaders[k];
+    });
+    var req = https.request({ method: 'POST', hostname: u.hostname, path: u.pathname + u.search, headers: headers }, function(res) {
       var chunks = [];
       res.on('data', function(c) { chunks.push(c); });
       res.on('end', function() { resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }); });
@@ -335,8 +337,38 @@ function qualityRank(q) {
   return QUALITY_ORDER.length;
 }
 
-// sk-api only answers with the source site as Referer; its JSON lists HLS streams
-// that play from any IP, so the server resolves it and the app plays it via /api/hls-proxy.
+// Dean Edwards packer, used by many embed hosts to hide their jwplayer setup.
+function unpackAll(html) {
+  var out = html, idx = html.indexOf('eval(function(p,a,c,k,e,d)');
+  while (idx !== -1) {
+    var m = html.slice(idx).match(/}\('([\s\S]*?)',\s*(\d+),\s*(\d+),\s*'([\s\S]*?)'\.split\('\|'\)/);
+    if (!m) break;
+    var p = m[1], a = +m[2], c = +m[3], k = m[4].split('|');
+    var enc = function(n) { return (n < a ? '' : enc(Math.floor(n / a))) + ((n = n % a) > 35 ? String.fromCharCode(n + 29) : n.toString(36)); };
+    while (c--) if (k[c]) p = p.replace(new RegExp('\\b' + enc(c) + '\\b', 'g'), k[c]);
+    out += '\n' + p;
+    idx = html.indexOf('eval(function(p,a,c,k,e,d)', idx + 1);
+  }
+  return out;
+}
+
+// Stream URLs from jwplayer/Playerjs pages: sources:[{file:"..."}], file:"[720p]url,[1080p]url", <source src>.
+function extractMedia(html) {
+  var found = [], seen = {}, m;
+  var re = /["']?(?:file|src|source)["']?\s*[:=]\s*["']([^"']+)["']/gi;
+  while ((m = re.exec(html)) !== null) {
+    m[1].replace(/\\\//g, '/').split(/,(?=\[)/).forEach(function(part) {
+      var labeled = part.match(/^\[([^\]]*)\](.+)$/);
+      var url = (labeled ? labeled[2] : part).trim();
+      if (!/^https?:\/\//.test(url) || !/\.(m3u8|mp4)(?:[\/?#]|$)/i.test(url) || seen[url]) return;
+      seen[url] = true;
+      found.push({ url: url, quality: labeled ? labeled[1] : '', kind: /\.m3u8/i.test(url) ? 'hls' : 'mp4' });
+    });
+  }
+  return found.sort(function(a, b) { return qualityRank(a.quality) - qualityRank(b.quality); });
+}
+
+// sk-api only answers with the source site as Referer; its JSON lists HLS streams.
 function resolveSkApi(url, referer) {
   var u = new URL(url);
   u.searchParams.set('mode', 'to-salvando-seu-ip');
@@ -348,30 +380,100 @@ function resolveSkApi(url, referer) {
   }).catch(function() { return null; });
 }
 
+function itagRank(u) {
+  var itag = (u.match(/[?&]itag=(\d+)/) || [])[1];
+  return itag === '22' ? 0 : itag === '18' ? 1 : 2;
+}
+
+// The Blogger player gets its stream list from an internal RPC. The googlevideo URLs it
+// returns are bound to the requesting IP, so the app plays them through /api/embed-proxy.
+function resolveBlogger(url) {
+  var token = new URL(url).searchParams.get('token');
+  return fetchText(url).then(function(html) {
+    var bl = (html.match(/"cfb2h":"([^"]+)"/) || [])[1] || '';
+    var sid = (html.match(/"FdrFJe":"([^"]+)"/) || [])[1] || '';
+    var freq = JSON.stringify([[['WcwnYd', JSON.stringify([token, '', 0]), null, 'generic']]]);
+    var rpc = 'https://www.blogger.com/_/BloggerVideoPlayerUi/data/batchexecute?rpcids=WcwnYd&source-path=%2Fvideo.g' +
+      '&f.sid=' + encodeURIComponent(sid) + '&bl=' + encodeURIComponent(bl) + '&hl=pt-BR&_reqid=' + (10000 + Math.floor(Math.random() * 90000)) + '&rt=c';
+    return postForm(rpc, 'f.req=' + encodeURIComponent(freq) + '&', url, {
+      'Origin': 'https://www.blogger.com',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+      'X-Requested-With': null
+    });
+  }).then(function(r) {
+    var line = r.body.split('\n').filter(function(l) { return l.indexOf('"wrb.fr"') !== -1; })[0];
+    if (!line) return null;
+    var urls = [];
+    (function walk(x) {
+      if (typeof x === 'string') { if (x.indexOf('googlevideo.com/videoplayback') !== -1) urls.push(x); }
+      else if (Array.isArray(x)) x.forEach(walk);
+    })(JSON.parse(JSON.parse(line)[0][2]));
+    return urls.sort(function(a, b) { return itagRank(a) - itagRank(b); })[0] || null;
+  }).catch(function() { return null; });
+}
+
+// Fetch an embed page and pull the stream out of its player setup.
+function resolveGeneric(url, site) {
+  return fetchUrl(url, 5, 8000, { Referer: site.base + '/' }).then(function(r) {
+    if (r.status >= 400) return null;
+    var html = r.body.toString();
+    if (DEAD_EMBED_TEXT.test(html.slice(0, 20000))) return null;
+    var media = extractMedia(unpackAll(html));
+    var origin = new URL(r.url).origin + '/';
+    return media.length ? { media: media[0], referer: origin } : { media: null, referer: origin };
+  }).catch(function() { return null; });
+}
+
+function hostName(url) { return new URL(url).hostname.replace(/^www\./, ''); }
+
+// Player kinds: 'hls' / 'mp4' play in the app's own <video>; 'iframe' embeds the host page
+// and is only offered when no stream could be extracted.
+function resolvePlayer(url, site) {
+  var host = hostName(url);
+  if (host.indexOf('sk-api') === 0) {
+    return resolveSkApi(url, site.base + '/').then(function(s) {
+      return s ? { kind: 'hls', url: s.url, name: 'Player HD' + (s.quality ? ' ' + s.quality : ''), rank: 1 } : null;
+    });
+  }
+  if (host.indexOf('blogger.com') !== -1) {
+    return resolveBlogger(url).then(function(gv) {
+      if (gv) return { kind: 'mp4', url: gv, proxy: true, name: 'Blogger' + (itagRank(gv) === 0 ? ' 720p' : ''), rank: 2 };
+      return { kind: 'iframe', url: url, name: 'Blogger (externo)', rank: 6 };
+    });
+  }
+  if (host.indexOf('filemoon') !== -1) {
+    return embedAlive(url).then(function(ok) { return ok ? { kind: 'iframe', url: url, name: 'Filemoon (externo)', rank: 7 } : null; });
+  }
+  return resolveGeneric(url, site).then(function(res) {
+    if (!res) return null;
+    if (res.media) {
+      return { kind: res.media.kind, url: res.media.url, referer: res.referer, name: host.split('.')[0] + (res.media.quality ? ' ' + res.media.quality : ''), rank: 0 };
+    }
+    // The source site's own pages (interstitials, donation walls) are not players.
+    if (host === hostName(site.base)) return null;
+    return { kind: 'iframe', url: url, name: host.split('.')[0] + ' (externo)', rank: 8 };
+  });
+}
+
 function embedAlive(url) {
   return fetchUrl(url, 3, 6000).then(function(r) {
     return r.status < 400 && !DEAD_EMBED_TEXT.test(r.body.toString().slice(0, 20000));
   }).catch(function() { return false; });
 }
 
-function resolvePlayer(url, site) {
-  var host = new URL(url).hostname.replace(/^www\./, '');
-  if (host.indexOf('sk-api') === 0) {
-    return resolveSkApi(url, site.base + '/').then(function(s) {
-      return s ? { kind: 'hls', url: s.url, name: 'Player HD' + (s.quality ? ' ' + s.quality : ''), rank: 0 } : null;
-    });
-  }
-  if (host.indexOf('blogger.com') !== -1) return Promise.resolve({ kind: 'iframe', url: url, name: 'Blogger', rank: 1 });
-  var name = host.indexOf('filemoon') !== -1 ? 'Filemoon' : host.split('.')[0];
-  var rank = host.indexOf('filemoon') !== -1 ? 2 : 3;
-  return embedAlive(url).then(function(ok) { return ok ? { kind: 'iframe', url: url, name: name, rank: rank } : null; });
-}
+var PLAYER_CACHE_TTL = 15 * 60 * 1000;
+var playerCache = {};
 
-function findEpisodeEmbeds(title, episode) {
-  var wantDub = /dublado/i.test(title);
+// lang: 'dub' | 'sub' | '' (falls back to "Dublado" in the title).
+function findEpisodeEmbeds(title, episode, lang) {
+  var wantDub = lang ? lang === 'dub' : /dublado/i.test(title);
   var epNum = parseInt(episode, 10);
+  var key = normalizeForMatch(title) + '|' + epNum + '|' + wantDub;
+  var cached = playerCache[key];
+  if (cached && (cached.pending || Date.now() - cached.at < PLAYER_CACHE_TTL)) return cached.promise;
+
   var traces = {};
-  return Promise.all(DOOPLAY_SITES.map(function(site) {
+  var promise = Promise.all(DOOPLAY_SITES.map(function(site) {
     var trace = traces[site.name] = [];
     return getAnimeVersions(site, title, trace).then(function(versions) {
       return Promise.all(versions.map(function(v) {
@@ -380,13 +482,13 @@ function findEpisodeEmbeds(title, episode) {
         if (!epUrl) { trace.push(tag + ': episode ' + epNum + ' not found'); return []; }
         return getEpisodeEmbeds(site, epUrl, trace).then(function(urls) {
           return Promise.all(urls.map(function(u) { return resolvePlayer(u, site); })).then(function(players) {
-            var alive = players.filter(Boolean);
-            trace.push(tag + ': ' + urls.length + ' options, ' + alive.length + ' usable');
-            return alive.map(function(p) {
+            var usable = players.filter(Boolean);
+            trace.push(tag + ': ' + urls.length + ' options, ' + usable.length + ' usable');
+            return usable.map(function(p) {
               return {
-                kind: p.kind, url: p.url, provider: site.name,
+                kind: p.kind, url: p.url, referer: p.referer || '', proxy: !!p.proxy, provider: site.name,
                 label: (v.dub ? 'Dublado' : 'Legendado') + ' · ' + p.name,
-                rank: (v.dub === wantDub ? 0 : 10) + p.rank
+                rank: (v.dub === wantDub ? 0 : 20) + p.rank
               };
             });
           });
@@ -397,8 +499,16 @@ function findEpisodeEmbeds(title, episode) {
     }).catch(function(err) { trace.push('error: ' + err.message); return []; });
   })).then(function(lists) {
     var embeds = [].concat.apply([], lists).sort(function(a, b) { return a.rank - b.rank; });
-    return { embeds: embeds, trace: traces };
+    var result = { embeds: embeds, trace: traces };
+    playerCache[key] = { at: Date.now(), promise: Promise.resolve(result) };
+    if (!embeds.length) delete playerCache[key];
+    return result;
+  }, function(err) {
+    delete playerCache[key];
+    throw err;
   });
+  playerCache[key] = { pending: true, promise: promise };
+  return promise;
 }
 
 // ── HLS Proxy ──────────────────────────────────────────────────────────────
@@ -531,6 +641,134 @@ function handleStreamProxy(req, urlObj, res) {
   proxyReq.setTimeout(60000, function() { proxyReq.destroy(); });
 }
 
+// ── Watch Party ─────────────────────────────────────────────────────────────
+// Rooms live in memory: clients receive events over SSE and send actions by POST.
+// Anyone in the room can play/pause/seek/change episode; the last action wins.
+
+var parties = {};
+var PARTY_TTL = 3 * 60 * 60 * 1000;
+var PARTY_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+var PARTY_ACTIONS = ['play', 'pause', 'seek', 'episode', 'chat'];
+
+function newPartyCode() {
+  var code;
+  do {
+    code = '';
+    for (var i = 0; i < 6; i++) code += PARTY_CODE_CHARS[crypto.randomInt(PARTY_CODE_CHARS.length)];
+  } while (parties[code]);
+  return code;
+}
+
+function readJsonBody(req) {
+  return new Promise(function(resolve, reject) {
+    var size = 0, chunks = [];
+    req.on('data', function(c) {
+      size += c.length;
+      if (size > 16384) { reject(new Error('body too large')); req.destroy(); } else chunks.push(c);
+    });
+    req.on('end', function() {
+      try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); } catch (e) { reject(e); }
+    });
+    req.on('error', reject);
+  });
+}
+
+function cleanText(v, max) { return String(v == null ? '' : v).slice(0, max); }
+
+function partyState(p) {
+  var s = p.state;
+  return { animeId: s.animeId, title: s.title, cover: s.cover, ep: s.ep, totalEps: s.totalEps, time: s.time, playing: s.playing, elapsed: (Date.now() - s.at) / 1000 };
+}
+
+function partyBroadcast(p, msg) {
+  var data = 'data: ' + JSON.stringify(msg) + '\n\n';
+  p.clients.forEach(function(c) { c.res.write(data); });
+}
+
+function partyMembers(p) {
+  return { type: 'members', count: p.clients.length, names: p.clients.map(function(c) { return c.name; }) };
+}
+
+function handleParty(req, res, pathname, urlObj) {
+  var parts = pathname.split('/').filter(Boolean);
+  var code = (parts[2] || '').toUpperCase();
+  var action = parts[3] || '';
+
+  if (!code) {
+    if (req.method !== 'POST') return sendJSON(res, 405, { error: true, message: 'Use POST' });
+    return readJsonBody(req).then(function(b) {
+      var c = newPartyCode();
+      parties[c] = {
+        code: c, clients: [], lastActive: Date.now(),
+        state: {
+          animeId: cleanText(b.animeId, 20), title: cleanText(b.title, 200), cover: cleanText(b.cover, 500),
+          ep: +b.ep || 1, totalEps: +b.totalEps || 0, time: +b.time || 0, playing: !!b.playing, at: Date.now()
+        }
+      };
+      sendJSON(res, 200, { code: c });
+    }).catch(function() { sendJSON(res, 400, { error: true, message: 'Dados inválidos' }); });
+  }
+
+  var p = parties[code];
+  if (!p) return sendJSON(res, 404, { error: true, message: 'Sala não encontrada' });
+  p.lastActive = Date.now();
+
+  if (!action && req.method === 'GET') {
+    return sendJSON(res, 200, { code: code, state: partyState(p), members: p.clients.length });
+  }
+
+  if (action === 'events' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no' });
+    var client = { res: res, name: cleanText(urlObj.searchParams.get('name'), 30) || 'Alguém' };
+    p.clients.push(client);
+    res.write('retry: 3000\n\n');
+    res.write('data: ' + JSON.stringify({ type: 'state', state: partyState(p) }) + '\n\n');
+    partyBroadcast(p, { type: 'join', name: client.name });
+    partyBroadcast(p, partyMembers(p));
+    var ping = setInterval(function() { res.write(': ping\n\n'); }, 25000);
+    req.on('close', function() {
+      clearInterval(ping);
+      p.clients = p.clients.filter(function(c) { return c !== client; });
+      p.lastActive = Date.now();
+      partyBroadcast(p, { type: 'leave', name: client.name });
+      partyBroadcast(p, partyMembers(p));
+    });
+    return;
+  }
+
+  if (action === 'action' && req.method === 'POST') {
+    return readJsonBody(req).then(function(b) {
+      if (PARTY_ACTIONS.indexOf(b.type) === -1) return sendJSON(res, 400, { error: true, message: 'Ação inválida' });
+      var s = p.state;
+      var msg = { type: b.type, from: cleanText(b.clientId, 20), name: cleanText(b.name, 30) || 'Alguém' };
+      if (b.type === 'chat') {
+        msg.text = cleanText(b.text, 300).trim();
+        if (!msg.text) return sendJSON(res, 400, { error: true, message: 'Mensagem vazia' });
+      } else if (b.type === 'episode') {
+        s.ep = +b.ep || s.ep; s.time = 0; s.playing = true; s.at = Date.now();
+        msg.ep = s.ep;
+      } else {
+        s.time = +b.time || 0;
+        s.playing = b.type === 'play' ? true : b.type === 'pause' ? false : !!b.playing;
+        s.at = Date.now();
+        msg.time = s.time;
+        msg.playing = s.playing;
+      }
+      partyBroadcast(p, msg);
+      sendJSON(res, 200, { ok: true });
+    }).catch(function() { sendJSON(res, 400, { error: true, message: 'Dados inválidos' }); });
+  }
+
+  sendJSON(res, 405, { error: true, message: 'Método não suportado' });
+}
+
+setInterval(function() {
+  var now = Date.now();
+  Object.keys(parties).forEach(function(c) {
+    if (!parties[c].clients.length && now - parties[c].lastActive > PARTY_TTL) delete parties[c];
+  });
+}, 10 * 60 * 1000).unref();
+
 // ── Router ──────────────────────────────────────────────────────────────────
 
 var server = http.createServer(function(req, res) {
@@ -547,7 +785,7 @@ var server = http.createServer(function(req, res) {
   // CORS headers for all responses
   var origin = req.headers.origin || '*';
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
@@ -557,6 +795,12 @@ var server = http.createServer(function(req, res) {
       server: 'running', timestamp: new Date().toISOString(),
       video_sources: DOOPLAY_SITES.map(function(s) { return s.name; })
     });
+    return;
+  }
+
+  // Route: /api/party[/:code[/events|/action]] - watch party rooms
+  if (pathname === '/api/party' || pathname.startsWith('/api/party/')) {
+    handleParty(req, res, pathname, urlObj);
     return;
   }
 
@@ -579,13 +823,13 @@ var server = http.createServer(function(req, res) {
     var episode = parts[3] || '1';
     var title = urlObj.searchParams.get('title') || slug.replace(/-/g, ' ');
 
-    findEpisodeEmbeds(title, episode).then(function(result) {
+    findEpisodeEmbeds(title, episode, urlObj.searchParams.get('lang') || '').then(function(result) {
       console.log('[Episode] "' + title + '" ep ' + episode + ': ' + result.embeds.length + ' players', JSON.stringify(result.trace));
       if (!result.embeds.length) {
         sendJSON(res, 404, { error: true, message: 'Episódio não encontrado', trace: result.trace });
         return;
       }
-      var embeds = result.embeds.map(function(e) { return { kind: e.kind, url: e.url, label: e.label, provider: e.provider }; });
+      var embeds = result.embeds.map(function(e) { return { kind: e.kind, url: e.url, label: e.label, provider: e.provider, referer: e.referer, proxy: e.proxy }; });
       sendJSON(res, 200, { error: false, data: { type: 'embed', provider: embeds[0].provider, embed_url: embeds[0].url, embeds: embeds }, trace: result.trace });
     }).catch(function(err) {
       console.error('[Episode] Error:', err.message);
@@ -651,5 +895,6 @@ server.listen(PORT, function() {
   console.log('  GET /api/proxy?url=                  - HTML/embed CORS proxy');
   console.log('  GET /api/embed-proxy?url=            - video stream proxy');
   console.log('  GET /api/status                      - server status');
+  console.log('  /api/party[/:code[/events|/action]]  - watch party rooms');
   console.log('Video sources: ' + DOOPLAY_SITES.map(function(s) { return s.name; }).join(', '));
 });
