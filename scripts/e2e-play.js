@@ -12,13 +12,14 @@ const CASES = [
 ];
 
 async function videoProgress(frame) {
-  return frame.evaluate(async () => {
+  const run = frame.evaluate(async () => {
     const vids = Array.from(document.querySelectorAll('video')).filter(v => v.currentSrc || v.src);
-    for (const v of vids) { v.muted = true; try { await v.play(); } catch (e) {} }
+    vids.forEach(v => { v.muted = true; v.play().catch(() => {}); });
     const before = vids.map(v => v.currentTime);
     await new Promise(r => setTimeout(r, 6000));
     return vids.map((v, i) => ({ adv: +(v.currentTime - before[i]).toFixed(1), t: +v.currentTime.toFixed(1), ready: v.readyState, err: v.error && v.error.code }));
   }).catch(() => []);
+  return Promise.race([run, new Promise(r => setTimeout(() => r([]), 12000))]);
 }
 
 async function runCase(browser, title, ep) {

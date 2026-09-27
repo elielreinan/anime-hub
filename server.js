@@ -408,13 +408,7 @@ function handleHLSProxy(urlObj, res) {
   var referer = urlObj.searchParams.get('referer') || '';
   if (!hlsUrl) { res.writeHead(400); res.end('Missing url'); return; }
 
-  if (!referer) {
-    try { referer = new URL(hlsUrl).origin + '/'; } catch(e) { referer = ''; }
-  }
-
-  console.log('[HLS-Proxy] Fetching:', hlsUrl.substring(0, 80));
-
-  fetchUrl(hlsUrl).then(function(result) {
+  fetchUrl(hlsUrl, 5, 20000, referer ? { Referer: referer } : null).then(function(result) {
     if (result.status >= 400) {
       res.writeHead(result.status, { 'Access-Control-Allow-Origin': '*' });
       res.end('Upstream error: ' + result.status);
@@ -423,33 +417,28 @@ function handleHLSProxy(urlObj, res) {
 
     var content = result.body.toString();
     // Not an m3u8 manifest - just proxy the binary data (TS segment, key, etc.)
-    if (content.indexOf('#EXTM3U') === -1 && !hlsUrl.match(/\.m3u8/i)) {
+    if (content.indexOf('#EXTM3U') === -1) {
       var ct = result.headers['content-type'] || 'video/mp2t';
       res.writeHead(200, { 'Content-Type': ct, 'Access-Control-Allow-Origin': '*' });
       res.end(result.body);
       return;
     }
 
-    var baseUrl = hlsUrl.substring(0, hlsUrl.lastIndexOf('/') + 1);
+    console.log('[HLS-Proxy] Manifest:', hlsUrl.substring(0, 80));
     var refParam = referer ? '&referer=' + encodeURIComponent(referer) : '';
+    // Resolve with URL(): CDN tokens put slashes in the query string, so the
+    // manifest's "directory" can't be found by cutting at the last '/'.
+    function proxied(uri) {
+      return '/api/hls-proxy?url=' + encodeURIComponent(new URL(uri, hlsUrl).toString()) + refParam;
+    }
 
-    var lines = content.split('\n');
-    var rewritten = lines.map(function(line) {
+    var rewritten = content.split('\n').map(function(line) {
       var trimmed = line.trim();
       if (!trimmed) return line;
-
-      // Rewrite URI= inside tags (encryption keys, init segments)
       if (trimmed.startsWith('#')) {
-        return line.replace(/URI="([^"]+)"/g, function(match, uri) {
-          var absUrl = uri.startsWith('http') ? uri : baseUrl + uri;
-          var proxy = uri.indexOf('.m3u8') !== -1 ? '/api/hls-proxy' : '/api/hls-proxy';
-          return 'URI="' + proxy + '?url=' + encodeURIComponent(absUrl) + refParam + '"';
-        });
+        return line.replace(/URI="([^"]+)"/g, function(match, uri) { return 'URI="' + proxied(uri) + '"'; });
       }
-
-      // URL line (segment or sub-manifest)
-      var absUrl = trimmed.startsWith('http') ? trimmed : baseUrl + trimmed;
-      return '/api/hls-proxy?url=' + encodeURIComponent(absUrl) + refParam;
+      return proxied(trimmed);
     });
 
     res.writeHead(200, {
