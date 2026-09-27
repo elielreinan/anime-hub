@@ -30,14 +30,17 @@ jobs:
         run: npx cap add android && npx cap sync android
       - name: App icon
         run: |
-          cd android/app/src/main/res
-          rm -rf mipmap-anydpi-v26
-          for d in mdpi:48 hdpi:72 xhdpi:96 xxhdpi:144 xxxhdpi:192; do
-            dir=mipmap-${d%%:*}; px=${d##*:}
-            for f in ic_launcher ic_launcher_round ic_launcher_foreground; do
-              [ -f $dir/$f.png ] && convert ../../../../../docs/icon-512.png -resize ${px}x${px} $dir/$f.png
-            done
-          done
+          npm install --no-save --no-audit --no-fund sharp@0.33
+          node -e '
+            const sharp = require("sharp"), fs = require("fs"), res = "android/app/src/main/res";
+            fs.rmSync(res + "/mipmap-anydpi-v26", { recursive: true, force: true });
+            const sizes = { mdpi: 48, hdpi: 72, xhdpi: 96, xxhdpi: 144, xxxhdpi: 192 };
+            Promise.all(Object.entries(sizes).flatMap(([d, px]) =>
+              ["ic_launcher", "ic_launcher_round", "ic_launcher_foreground"].map(f => res + "/mipmap-" + d + "/" + f + ".png")
+                .filter(f => fs.existsSync(f))
+                .map(f => sharp("docs/icon-512.png").resize(px, px).toBuffer().then(b => fs.writeFileSync(f, b)))
+            )).then(r => console.log("icons:", r.length));
+          '
       - name: Build
         working-directory: android
         run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
