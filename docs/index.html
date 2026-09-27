@@ -121,26 +121,7 @@
     .list-name { font-size: 15px; font-weight: 600; }
     .list-count { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
-    .community-card { margin: 0 16px 12px; background: var(--card); border-radius: 14px; padding: 16px; border: 1px solid #2d2d3d; }
-    .community-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-    .community-avatar { width: 40px; height: 40px; border-radius: 50%; background: #2d2d3d; display: flex; align-items: center; justify-content: center; color: #9ca3af; flex-shrink: 0; overflow: hidden; }
-    .community-user { font-size: 14px; font-weight: 600; }
-    .community-time { font-size: 11px; color: var(--muted); }
-    .community-text { font-size: 14px; color: var(--text); line-height: 1.5; margin-bottom: 12px; }
-    .community-image { width: 100%; border-radius: 10px; margin-bottom: 12px; max-height: 300px; object-fit: cover; }
-    .community-actions { display: flex; gap: 20px; }
-    .community-action { display: flex; align-items: center; gap: 6px; background: none; border: none; color: #9ca3af; font-size: 13px; cursor: pointer; font-family: inherit; transition: color 0.2s; }
-    .community-action:hover { color: var(--accent); }
-    .community-action.liked { color: #ef4444; }
 
-    .clan-card { margin: 0 16px 12px; background: var(--card); border-radius: 14px; padding: 16px; border: 1px solid #2d2d3d; display: flex; align-items: center; gap: 14px; cursor: pointer; transition: background 0.15s; }
-    .clan-card:active { background: #22222e; }
-    .clan-emblem { width: 52px; height: 52px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0; }
-    .clan-info { flex: 1; min-width: 0; }
-    .clan-name { font-size: 15px; font-weight: 700; }
-    .clan-desc { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .clan-members { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 4px; }
-    .clan-badge { padding: 4px 10px; background: rgba(255,90,38,0.15); color: var(--accent); font-size: 11px; font-weight: 700; border-radius: 20px; white-space: nowrap; }
 
     .rank-item { display: flex; align-items: center; padding: 14px 16px; gap: 14px; border-bottom: 1px solid var(--card); }
     .rank-pos { width: 32px; font-size: 18px; font-weight: 800; text-align: center; flex-shrink: 0; }
@@ -328,6 +309,29 @@
     .skeleton-card { width: 120px; flex-shrink: 0; }
     .toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); background: var(--card); color: #fff; padding: 12px 24px; border-radius: 12px; border: 1px solid var(--accent); font-size: 14px; font-weight: 600; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
     .toast.show { opacity: 1; }
+    .corner-btn { position: absolute; right: 16px; bottom: 70px; z-index: 5; display: none; background: rgba(0,0,0,0.82); color: #fff; border: 1px solid var(--accent); border-radius: 10px; padding: 10px 14px; font-weight: 700; font-family: inherit; font-size: 13px; cursor: pointer; }
+    .corner-btn.show { display: block; }
+    .player-top-btn.icon-only { padding: 6px 8px; }
+    .player-top-btn.hidden { display: none; }
+    .reaction-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 290; }
+    .reaction-float { position: absolute; bottom: 18%; font-size: 34px; text-align: center; animation: reactionUp 2.8s ease-out forwards; }
+    .reaction-float small { display: block; font-size: 11px; color: #fff; text-shadow: 0 1px 3px #000; }
+    @keyframes reactionUp { from { transform: translateY(0) scale(0.8); opacity: 1; } to { transform: translateY(-55vh) scale(1.25); opacity: 0; } }
+    .party-reactions { display: flex; gap: 6px; }
+    .party-reactions button { flex: 1; font-size: 20px; background: var(--card); border: 1px solid #2d2d3d; border-radius: 10px; padding: 6px 0; cursor: pointer; }
+    .party-reactions button:active { transform: scale(0.9); }
+    .party-vote { background: var(--card); border: 1px solid #2d2d3d; border-radius: 12px; padding: 10px 12px; font-size: 13px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .party-vote.active { border-color: var(--accent); }
+    .cal-days { display: flex; gap: 8px; padding: 0 16px 14px; overflow-x: auto; scrollbar-width: none; }
+    .cal-days::-webkit-scrollbar { display: none; }
+    .cal-item { display: flex; gap: 12px; align-items: center; margin: 0 16px 10px; background: var(--card); border: 1px solid #2d2d3d; border-radius: 12px; padding: 10px; cursor: pointer; }
+    .cal-item:active { background: #22222e; }
+    .cal-item img { width: 54px; height: 76px; object-fit: cover; border-radius: 8px; flex-shrink: 0; background: #222; }
+    .cal-time { font-size: 12px; color: var(--accent); font-weight: 800; }
+    .cal-title { font-size: 14px; font-weight: 700; margin-top: 2px; }
+    .cal-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .cal-follow { font-size: 10px; font-weight: 800; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 6px; margin-left: 6px; vertical-align: middle; }
+    .transfer-box { padding: 16px; display: flex; flex-direction: column; gap: 12px; font-size: 14px; line-height: 1.5; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -396,25 +400,18 @@
     <div style="height:90px"></div>
   </div>
 
-  <!-- COMMUNITY -->
-  <div id="page-community" class="page">
+  <!-- CALENDAR -->
+  <div id="page-calendar" class="page">
     <div class="page-spacer"></div>
-    <div class="sub-tabs">
-      <button class="sub-tab active" onclick="switchCommunityTab(this,'feed')">Feed</button>
-      <button class="sub-tab" onclick="switchCommunityTab(this,'clans')">Clãs</button>
-    </div>
-    <div id="community-feed"></div>
-    <div id="community-clans" style="display:none"></div>
+    <div class="section-header" style="padding-top:4px"><h2 class="section-title">Lançamentos da temporada</h2></div>
+    <div class="cal-days" id="cal-days"></div>
+    <div id="cal-list"></div>
     <div style="height:90px"></div>
   </div>
 
   <!-- RANKING -->
   <div id="page-ranking" class="page">
     <div class="page-spacer"></div>
-    <div class="sub-tabs">
-      <button class="sub-tab active" onclick="switchRankingMode(this,'anime')">Anime</button>
-      <button class="sub-tab" onclick="switchRankingMode(this,'users')">Usuários</button>
-    </div>
     <div id="ranking-anime">
       <div class="section-header" style="padding-top:4px"><h2 class="section-title">Top Anime — Ranking Global</h2></div>
       <div class="rank-tabs">
@@ -424,10 +421,6 @@
         <button class="filter-chip" onclick="loadRanking(this,'favorites')">Favoritos</button>
       </div>
       <div id="ranking-list"></div>
-    </div>
-    <div id="ranking-users" style="display:none">
-      <div class="section-header" style="padding-top:4px"><h2 class="section-title">Top Otakus — Ranking de Usuários</h2></div>
-      <div id="user-ranking-list"></div>
     </div>
     <div style="height:90px"></div>
   </div>
@@ -449,11 +442,16 @@
       <span class="menu-text">Configurações</span>
       <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
     </div>
-    <div class="menu-item" onclick="showToast('Em breve!')">
-      <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg></span>
-      <span class="menu-text">Ajuda & Suporte</span>
+    <div class="menu-item" onclick="openTransfer()">
+      <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg></span>
+      <span class="menu-text">Levar meus dados para outro aparelho</span>
       <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
     </div>
+    <a class="menu-item" id="android-app-item" style="display:none;color:inherit;text-decoration:none" href="https://github.com/elielreinan/anime-hub/releases/download/android/AnimeHub.apk">
+      <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></span>
+      <span class="menu-text">Baixar app Android</span>
+      <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
+    </a>
     <div class="footer"><span>Codado por </span><a href="https://instagram.com" target="_blank">2E</a></div>
   </div>
 
@@ -470,6 +468,8 @@
     <div class="player-top">
       <button class="player-close" onclick="closePlayer()" aria-label="Voltar"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></button>
       <div class="player-ep-info" id="player-ep-info"></div>
+      <button class="player-top-btn icon-only hidden" id="pip-btn" onclick="togglePip()" aria-label="Janela flutuante" title="Janela flutuante"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><rect x="12" y="12" width="8" height="6" rx="1" fill="currentColor"/></svg></button>
+      <button class="player-top-btn icon-only hidden" id="cast-btn" onclick="castVideo()" aria-label="Transmitir para a TV" title="Transmitir para a TV"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16.1A5 5 0 0 1 5.9 20"/><path d="M2 12.05A9 9 0 0 1 9.95 20"/><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 20h.01"/></svg></button>
       <button class="player-top-btn" id="party-btn" onclick="togglePartyPanel()" aria-label="Assistir junto"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span id="party-btn-label">Juntos</span></button>
     </div>
     <div class="player-body" id="player-body">
@@ -480,6 +480,8 @@
         <p id="player-status">Buscando episódio...</p>
         <div id="player-spinner" style="margin-top:12px;width:32px;height:32px;border:3px solid #333;border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;display:none"></div>
       </div>
+      <button class="corner-btn" id="skip-ending-btn" onclick="skipEnding()">Pular encerramento ›</button>
+      <button class="corner-btn" id="undo-skip-btn" onclick="undoAutoSkip()">Abertura pulada · Voltar</button>
       <div class="next-countdown" id="next-countdown">
         <span>Próximo episódio em <b id="next-countdown-sec">5</b>s</span>
         <button onclick="nextEpisode()">Assistir agora</button>
@@ -517,6 +519,26 @@
     <div id="notifications-body"></div>
   </div>
 
+  <!-- TRANSFER -->
+  <div class="sheet" id="transfer-sheet">
+    <div class="sheet-header">
+      <button class="sheet-back" onclick="closeSheet('transfer-sheet')" aria-label="Voltar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></button>
+      <h2>Levar para outro aparelho</h2>
+    </div>
+    <div class="transfer-box">
+      <div>Suas listas, histórico, animes seguidos e configurações ficam só neste aparelho. Para levar tudo para outro celular ou computador, mande o link para você mesmo e abra lá. Nada passa pelo nosso servidor.</div>
+      <button class="party-btn" onclick="shareTransferLink()">Enviar link de transferência</button>
+      <div class="party-muted">Ou guarde um arquivo de backup:</div>
+      <div class="party-row">
+        <button class="party-btn ghost" style="flex:1" onclick="downloadBackup()">Baixar backup</button>
+        <button class="party-btn ghost" style="flex:1" onclick="document.getElementById('backup-file').click()">Restaurar backup</button>
+      </div>
+      <input type="file" id="backup-file" accept=".json,application/json" style="display:none" onchange="restoreBackupFile(this)">
+    </div>
+  </div>
+
+  <div class="reaction-layer" id="reaction-layer"></div>
+
   <!-- WATCH PARTY -->
   <div class="party-backdrop" id="party-backdrop" onclick="closePartySheet()"></div>
   <div class="party-panel" id="party-panel" role="dialog" aria-label="Assistir junto"></div>
@@ -544,10 +566,10 @@
         <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg></span>
         <span class="tab-label">Explorar</span>
       </button>
-      <button class="tab" onclick="switchTab('community')">
+      <button class="tab" onclick="switchTab('calendar')">
         <div class="tab-indicator"></div>
-        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-        <span class="tab-label">Social</span>
+        <span class="tab-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></span>
+        <span class="tab-label">Agenda</span>
       </button>
       <button class="tab" onclick="switchTab('ranking')">
         <div class="tab-indicator"></div>
@@ -1129,8 +1151,10 @@
       playerEmbeds = [];
       playerServerIndex = -1;
       playerSwitchTime = 0;
+      autoSkipState = null;
       resetPlayerMedia();
       cancelNextCountdown();
+      hideCornerButtons();
       document.getElementById('player-servers').innerHTML = '';
       document.getElementById('player-ep-info').textContent = (currentAnime ? getTitle(currentAnime) : 'Anime') + ' — Ep ' + ep;
       document.getElementById('prev-ep-btn').disabled = ep <= 1;
@@ -1291,11 +1315,14 @@
       if (!videoEl.seeking) lastPlaybackTime = videoEl.currentTime;
       document.getElementById('skip-opening-btn').style.visibility = videoEl.currentTime < 360 ? 'visible' : 'hidden';
       if (Date.now() - lastProgressSave > 5000) saveCurrentProgress();
+      maybeAutoSkip();
+      updateSkipEndingButton();
     });
 
     videoEl.addEventListener('ended', function() {
       saveCurrentProgress(100);
-      if (getSettings().autoplay && (!playerTotalEps || playerEpisode < playerTotalEps)) startNextCountdown();
+      hideCornerButtons();
+      if (getSettings().autoplay && hasNextEpisode()) startNextCountdown();
       else showToast('Episódio concluído!');
     });
 
@@ -1335,9 +1362,106 @@
     function skipOpening() {
       if (!videoEl.duration) return;
       var s = getSettings().skipSeconds;
+      rememberOpeningSkip(videoEl.currentTime, s);
       videoEl.currentTime = Math.min(videoEl.duration - 1, videoEl.currentTime + s);
       showToast('Pulou ' + s + 's');
     }
+
+    // ── Opening/ending skips ──
+    // Where the viewer skips the opening is remembered per anime; after two episodes
+    // the opening is skipped on its own at that point (with a "Voltar" to undo).
+    var autoSkipState = null;
+    var autoSkipTimer = null;
+
+    function rememberOpeningSkip(from, len) {
+      if (!currentAnime || from > 360) return;
+      var marks = getStore('skipmarks'), id = String(currentAnime.id), m = marks[id] || { count: 0 };
+      if (m.lastEp === playerEpisode) return;
+      m.from = from; m.len = len; m.lastEp = playerEpisode; m.count = (m.count || 0) + 1;
+      marks[id] = m;
+      setStore('skipmarks', marks);
+      if (m.count === 2 && getSettings().autoSkip) showToast('Nos próximos episódios a abertura será pulada sozinha');
+    }
+
+    function maybeAutoSkip() {
+      if (!currentAnime || videoEl.paused || !videoEl.duration) return;
+      if (!autoSkipState) {
+        var m = getStore('skipmarks')[String(currentAnime.id)];
+        autoSkipState = { mark: getSettings().autoSkip && m && m.count >= 2 && m.lastEp !== playerEpisode ? m : null, done: false };
+      }
+      var st = autoSkipState, m = st.mark, t = videoEl.currentTime;
+      if (!m || st.done || t < m.from || t > m.from + 4 || videoEl.duration < m.from + m.len + 60) return;
+      st.done = true;
+      st.from = t;
+      videoEl.currentTime = t + m.len;
+      var btn = document.getElementById('undo-skip-btn');
+      btn.classList.add('show');
+      clearTimeout(autoSkipTimer);
+      autoSkipTimer = setTimeout(function() { btn.classList.remove('show'); }, 8000);
+    }
+
+    function undoAutoSkip() {
+      document.getElementById('undo-skip-btn').classList.remove('show');
+      if (!autoSkipState || autoSkipState.from == null) return;
+      videoEl.currentTime = autoSkipState.from;
+      // They wanted this opening: stop skipping it until they skip twice again.
+      var marks = getStore('skipmarks'), id = currentAnime && String(currentAnime.id);
+      if (id && marks[id]) { marks[id].count = 0; setStore('skipmarks', marks); }
+    }
+
+    function hasNextEpisode() { return !playerTotalEps || playerEpisode < playerTotalEps; }
+
+    function updateSkipEndingButton() {
+      var d = videoEl.duration, left = d - videoEl.currentTime;
+      var show = d > 600 && left < 110 && left > 8 && hasNextEpisode() && !nextCountdownTimer;
+      document.getElementById('skip-ending-btn').classList.toggle('show', show);
+    }
+
+    function skipEnding() {
+      document.getElementById('skip-ending-btn').classList.remove('show');
+      saveCurrentProgress(100);
+      nextEpisode();
+    }
+
+    function hideCornerButtons() {
+      clearTimeout(autoSkipTimer);
+      document.getElementById('skip-ending-btn').classList.remove('show');
+      document.getElementById('undo-skip-btn').classList.remove('show');
+    }
+
+    // ── Picture-in-picture and casting ──
+    function ownPlayerActive() {
+      if (videoEl.style.display !== 'none') return true;
+      showToast('Só funciona com os servidores que tocam no player do app');
+      return false;
+    }
+
+    function togglePip() {
+      if (document.pictureInPictureElement) { document.exitPictureInPicture().catch(function() {}); return; }
+      if (!ownPlayerActive()) return;
+      if (videoEl.requestPictureInPicture && document.pictureInPictureEnabled) {
+        videoEl.requestPictureInPicture().catch(function() { showToast('Janela flutuante indisponível agora'); });
+      } else if (videoEl.webkitSetPresentationMode) {
+        videoEl.webkitSetPresentationMode(videoEl.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+      }
+    }
+
+    function castVideo() {
+      if (!ownPlayerActive()) return;
+      if (videoEl.webkitShowPlaybackTargetPicker) { videoEl.webkitShowPlaybackTargetPicker(); return; }
+      if (videoEl.remote && videoEl.remote.prompt) {
+        videoEl.remote.prompt().catch(function(e) {
+          showToast(e && e.name === 'NotSupportedError' ? 'Este servidor não pode ser transmitido. Tente um servidor Blogger ou Player HD.' : 'Nenhuma TV encontrada na sua rede');
+        });
+      }
+    }
+
+    (function initMediaButtons() {
+      var pip = (document.pictureInPictureEnabled && videoEl.requestPictureInPicture) || videoEl.webkitSetPresentationMode;
+      var cast = videoEl.webkitShowPlaybackTargetPicker || (videoEl.remote && videoEl.remote.prompt);
+      document.getElementById('pip-btn').classList.toggle('hidden', !pip);
+      document.getElementById('cast-btn').classList.toggle('hidden', !cast);
+    })();
 
     function seekBy(seconds) {
       if (!videoEl.duration) return;
@@ -1388,7 +1512,7 @@
     });
 
     // ── Settings ──
-    var DEFAULT_SETTINGS = { lang: 'sub', autoplay: true, resume: true, skipSeconds: 85, notifications: false, nickname: '' };
+    var DEFAULT_SETTINGS = { lang: 'sub', autoplay: true, resume: true, skipSeconds: 85, autoSkip: true, notifications: false, nickname: '' };
 
     function getSettings() {
       var saved = getStore('settings'), out = {};
@@ -1456,6 +1580,7 @@
         settingRow('Próximo episódio automático', 'Começa o próximo 5s depois que o episódio acaba', settingToggle('autoplay', s.autoplay)) +
         settingRow('Continuar de onde parei', 'Volta ao ponto em que você parou o episódio', settingToggle('resume', s.resume)) +
         settingRow('Pular abertura', 'Quanto o botão "Pular abertura" avança', '<select class="sort-select" onchange="setSetting(\'skipSeconds\', +this.value)">' + skipOpts + '</select>') +
+        settingRow('Pular abertura sozinho', 'Depois que você pula a abertura em 2 episódios do mesmo anime, as próximas são puladas automaticamente', settingToggle('autoSkip', s.autoSkip)) +
         '<div class="setting-group">Notificações</div>' +
         settingRow('Novos episódios', notifDesc, settingToggle('notifications', s.notifications && perm === 'granted')) +
         '<div class="setting-group">Assistir junto</div>' +
@@ -1692,17 +1817,42 @@
       }).catch(function() { showToast('Sala não encontrada'); });
     }
 
-    function connectParty(code) {
-      if (party && party.events) party.events.close();
-      party = { code: code, members: 1, names: [], messages: [], state: null, events: null };
+    // keep: reconnecting to the same room, so chat and state stay on screen.
+    function connectParty(code, keep) {
+      var old = party;
+      if (old && old.events) old.events.close();
+      party = { code: code, members: 1, names: [], messages: [], state: null, vote: null, events: null, retries: 0 };
+      if (keep && old) { party.messages = old.messages; party.state = old.state; party.members = old.members; party.names = old.names; }
       var es = new EventSource(getApiBase() + '/api/party/' + encodeURIComponent(code) + '/events?clientId=' + CLIENT_ID + '&name=' + encodeURIComponent(partyName()));
       party.events = es;
+      es.onopen = function() { if (party && party.events === es) party.retries = 0; };
       es.onmessage = function(m) {
         var ev;
         try { ev = JSON.parse(m.data); } catch (e) { return; }
         handlePartyEvent(ev);
       };
+      // The browser retries dropped connections itself; it gives up (CLOSED) when the
+      // room is gone, which happens when the free server restarts or falls asleep.
+      es.onerror = function() {
+        if (party && party.events === es && es.readyState === 2) restoreParty(code);
+      };
       updatePartyUi();
+    }
+
+    function restoreParty(code) {
+      if (!party || party.code !== code) return;
+      var attempt = party.retries++;
+      partyApi('/' + encodeURIComponent(code)).catch(function(err) {
+        if (!/404/.test(err.message)) throw err;
+        var st = party.state || {};
+        var body = { code: code, animeId: st.animeId, title: st.title, cover: st.cover, ep: st.ep, totalEps: st.totalEps };
+        if (isSameEpisode(st) && videoEl.duration) { body.time = videoEl.currentTime; body.playing = !videoEl.paused; }
+        return partyApi('', body);
+      }).then(function() {
+        if (party && party.code === code) connectParty(code, true);
+      }).catch(function() {
+        if (party && party.code === code) setTimeout(function() { restoreParty(code); }, Math.min(30000, 3000 * (attempt + 1)));
+      });
     }
 
     function leaveParty() {
@@ -1723,11 +1873,14 @@
       if (!party) return;
       if (ev.type === 'members') { party.members = ev.count; party.names = ev.names || []; updatePartyUi(); renderPartyMembers(); return; }
       if (ev.type === 'chat') { appendPartyMessage(ev.name, ev.text); return; }
+      if (ev.type === 'reaction') { floatReaction(ev.emoji, ev.name); return; }
+      if (ev.type === 'vote') { handlePartyVote(ev); return; }
       if (ev.type === 'join' || ev.type === 'leave') { appendPartyMessage(null, ev.name + (ev.type === 'join' ? ' entrou na sala' : ' saiu da sala')); return; }
       if (ev.type === 'state') {
         var st = ev.state;
         party.state = st;
         renderPartyNow();
+        renderPartyVote();
         if (!st.animeId || !st.ep) return;
         var sync = { time: st.time + (st.playing ? st.elapsed : 0), playing: st.playing };
         if (!isSameEpisode(st)) openRemoteEpisode(st, sync);
@@ -1738,8 +1891,9 @@
       if (ev.type === 'episode') {
         party.state = { animeId: ev.animeId, title: ev.title, cover: ev.cover, totalEps: ev.totalEps, ep: ev.ep };
         renderPartyNow();
+        renderPartyVote();
         if (ev.from === CLIENT_ID || isSameEpisode(ev)) return;
-        appendPartyMessage(null, ev.name + ' abriu ' + ev.title + ' — Ep ' + ev.ep);
+        appendPartyMessage(null, ev.from === 'vote' ? 'A sala votou: indo para o Ep ' + ev.ep : ev.name + ' abriu ' + ev.title + ' — Ep ' + ev.ep);
         openRemoteEpisode(ev, { time: 0, playing: true });
         return;
       }
@@ -1814,6 +1968,62 @@
       if (!party || !text) return;
       input.value = '';
       partyApi('/' + party.code + '/action', { clientId: CLIENT_ID, name: partyName(), type: 'chat', text: text }).catch(function() { showToast('Mensagem não enviada'); });
+    }
+
+    var PARTY_REACTIONS = ['😂', '😮', '😍', '🔥', '😭', '👏'];
+
+    function sendReaction(emoji) {
+      if (!party) return;
+      partyApi('/' + party.code + '/action', { clientId: CLIENT_ID, name: partyName(), type: 'reaction', emoji: emoji }).catch(function() {});
+    }
+
+    function floatReaction(emoji, name) {
+      var layer = document.getElementById('reaction-layer');
+      if (layer.childElementCount > 30) return;
+      var el = document.createElement('div');
+      el.className = 'reaction-float';
+      el.style.left = (8 + Math.random() * 80) + '%';
+      el.textContent = emoji;
+      if (name) { var who = document.createElement('small'); who.textContent = name; el.appendChild(who); }
+      layer.appendChild(el);
+      setTimeout(function() { el.remove(); }, 2900);
+    }
+
+    function voteNext(cancel) {
+      if (!party) return;
+      partyApi('/' + party.code + '/action', { clientId: CLIENT_ID, name: partyName(), type: 'vote', cancel: !!cancel }).catch(function() { showToast('Não foi possível votar'); });
+    }
+
+    function handlePartyVote(ev) {
+      var before = party.vote;
+      party.vote = ev.ep ? ev : null;
+      var mine = ev.voters && ev.voters.indexOf(CLIENT_ID) !== -1;
+      if (ev.ep && (!before || before.ep !== ev.ep) && !mine) {
+        showToast(ev.by + ' quer ir para o Ep ' + ev.ep + '. Abra a sala para votar');
+        appendPartyMessage(null, ev.by + ' quer ir para o Ep ' + ev.ep);
+      }
+      renderPartyVote();
+    }
+
+    function renderPartyVote() {
+      var el = document.getElementById('party-vote');
+      if (!el || !party) return;
+      var st = party.state, v = party.vote;
+      if (v && v.ep) {
+        var mine = v.voters && v.voters.indexOf(CLIENT_ID) !== -1;
+        el.className = 'party-vote active';
+        el.innerHTML = '<span>Ir para o Ep ' + v.ep + '? <b>' + v.count + '/' + v.needed + '</b> votos</span>' +
+          (mine ? '<button class="party-btn ghost" onclick="voteNext(true)">Tirar voto</button>' : '<button class="party-btn" onclick="voteNext()">Votar</button>');
+      } else if (st && st.ep && (!st.totalEps || st.ep < st.totalEps)) {
+        el.className = 'party-vote';
+        el.innerHTML = '<span>Todo mundo pronto pro próximo?</span><button class="party-btn ghost" onclick="voteNext()">Votar no Ep ' + (st.ep + 1) + '</button>';
+      } else {
+        el.className = 'party-vote';
+        el.innerHTML = '';
+        el.style.display = 'none';
+        return;
+      }
+      el.style.display = '';
     }
 
     function appendPartyMessage(name, text) {
@@ -1898,6 +2108,8 @@
         '<div class="party-code">' + escapeHtml(party.code) + '</div>' +
         '<div class="party-row"><button class="party-btn" style="flex:1" onclick="shareParty()">Convidar</button><button class="party-btn ghost" onclick="leaveParty()">Sair da sala</button></div>' +
         '<div class="party-now" id="party-now"></div>' +
+        '<div class="party-vote" id="party-vote"></div>' +
+        '<div class="party-reactions">' + PARTY_REACTIONS.map(function(e) { return '<button onclick="sendReaction(\'' + e + '\')" aria-label="Reagir ' + e + '">' + e + '</button>'; }).join('') + '</div>' +
         '<div class="party-muted" id="party-members"></div>' +
         '<div class="party-chat" id="party-chat"></div>' +
         '<div class="party-row"><input id="party-chat-input" maxlength="300" placeholder="Mensagem" onkeydown="if(event.key===\'Enter\')sendPartyChat()"><button class="party-btn" onclick="sendPartyChat()">Enviar</button></div>';
@@ -1906,6 +2118,7 @@
       chat.scrollTop = chat.scrollHeight;
       renderPartyNow();
       renderPartyMembers();
+      renderPartyVote();
     }
 
     function shareParty() {
@@ -1941,89 +2154,6 @@
       });
     }
     loadRanking(null, 'score');
-
-    // ── User Ranking ──
-    var mockUsers = [
-      { name: 'KageShadow', watched: 342, level: 'Legend', badge: 'legend', xp: 15420 },
-      { name: 'NeonOtaku', watched: 287, level: 'Master', badge: 'master', xp: 12350 },
-      { name: 'SakuraFan', watched: 231, level: 'Senpai', badge: 'senpai', xp: 9870 },
-      { name: 'DragonSlyr', watched: 198, level: 'Senpai', badge: 'senpai', xp: 8540 },
-      { name: 'MoonWatcher', watched: 176, level: 'Otaku', badge: 'otaku', xp: 7230 },
-      { name: 'AkiraBlaze', watched: 154, level: 'Otaku', badge: 'otaku', xp: 6110 },
-      { name: '', you: true, watched: 0, level: 'Weeb', badge: 'weeb', xp: 0 },
-      { name: 'ShiroKami', watched: 128, level: 'Otaku', badge: 'otaku', xp: 5200 },
-      { name: 'HanamiDream', watched: 112, level: 'Weeb', badge: 'weeb', xp: 4560 },
-      { name: 'RyuzenX', watched: 96, level: 'Weeb', badge: 'weeb', xp: 3890 },
-    ];
-
-    function renderUserRanking() {
-      var lists = getUserLists();
-      var totalWatched = Object.values(lists).reduce(function(sum, arr) { return sum + (arr ? arr.length : 0); }, 0);
-      mockUsers[6].name = getSettings().nickname || getDefaultNickname();
-      mockUsers[6].watched = totalWatched;
-      mockUsers[6].xp = totalWatched * 42;
-      if (totalWatched > 10) { mockUsers[6].level = 'Otaku'; mockUsers[6].badge = 'otaku'; }
-      if (totalWatched > 50) { mockUsers[6].level = 'Senpai'; mockUsers[6].badge = 'senpai'; }
-      if (totalWatched > 150) { mockUsers[6].level = 'Master'; mockUsers[6].badge = 'master'; }
-      if (totalWatched > 300) { mockUsers[6].level = 'Legend'; mockUsers[6].badge = 'legend'; }
-
-      var sorted = mockUsers.slice().sort(function(a, b) { return b.xp - a.xp; });
-
-      var SVG_USER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-      document.getElementById('user-ranking-list').innerHTML = sorted.map(function(u, i) {
-        var posClass = i === 0 ? 'gold' : i === 1 ? 'silver' : i === 2 ? 'bronze' : '';
-        var isYou = !!u.you;
-        return '<div class="rank-item" style="' + (isYou ? 'background:rgba(255,90,38,0.08);border-left:3px solid var(--accent)' : '') + '">' +
-          '<div class="rank-pos ' + posClass + '">' + (i + 1) + '</div>' +
-          '<div class="rank-avatar">' + SVG_USER + '</div>' +
-          '<div class="rank-info"><div class="rank-name">' + escapeHtml(u.name) + (isYou ? ' <span style="font-size:11px;color:var(--accent)">(você)</span>' : '') + '</div>' +
-          '<div class="rank-detail">' + u.watched + ' animes assistidos · <span class="rank-badge ' + u.badge + '">' + u.level + '</span></div></div>' +
-          '<div class="rank-score">' + u.xp.toLocaleString() + '<span style="font-size:10px;color:var(--muted);margin-left:2px">XP</span></div></div>';
-      }).join('');
-    }
-
-    function switchRankingMode(el, mode) {
-      document.querySelectorAll('#page-ranking .sub-tab').forEach(function(t) { t.classList.remove('active'); });
-      el.classList.add('active');
-      document.getElementById('ranking-anime').style.display = mode === 'anime' ? 'block' : 'none';
-      document.getElementById('ranking-users').style.display = mode === 'users' ? 'block' : 'none';
-      if (mode === 'users') renderUserRanking();
-    }
-
-    // ── Community (mock) ──
-    var SVG_USER = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
-    var SVG_HEART = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg>';
-    var SVG_COMMENT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>';
-    var SVG_SHARE = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/></svg>';
-
-    var posts = [
-      { user: 'KageShadow', time: '2h', text: 'Alguém mais ficou de queixo caído com o último episódio de Jujutsu Kaisen? Aquela cena final foi insana!', likes: 42, comments: 18 },
-      { user: 'NeonOtaku', time: '5h', text: 'Meu ranking da temporada: 1. Solo Leveling, 2. Dandadan, 3. Blue Lock. Discordem nos comentários', likes: 87, comments: 34 },
-      { user: 'SakuraFan', time: '8h', text: 'Frieren é muito subestimado. A trilha sonora é de outro nível e os personagens são super bem desenvolvidos. Quem concorda?', likes: 23, comments: 9 },
-    ];
-
-    document.getElementById('community-feed').innerHTML = posts.map(function(p) {
-      return '<div class="community-card"><div class="community-header"><div class="community-avatar">' + SVG_USER + '</div><div><div class="community-user">' + p.user + '</div><div class="community-time">' + p.time + ' atrás</div></div></div>' +
-        '<div class="community-text">' + p.text + '</div>' +
-        '<div class="community-actions">' +
-          '<button class="community-action" onclick="this.classList.toggle(\'liked\')">' + SVG_HEART + ' ' + p.likes + '</button>' +
-          '<button class="community-action">' + SVG_COMMENT + ' ' + p.comments + '</button>' +
-          '<button class="community-action">' + SVG_SHARE + ' Compartilhar</button>' +
-        '</div></div>';
-    }).join('');
-
-    var clans = [
-      { name: 'Akatsuki Elite', desc: 'Clã competitivo focado em rankings', members: '1.247', gradient: 'linear-gradient(135deg,#ef4444,#991b1b)', emoji: '⚔️', badge: 'TOP 1' },
-      { name: 'Dragon Slayers', desc: 'União faz a força — assistimos juntos', members: '893', gradient: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', emoji: '🐉', badge: 'TOP 2' },
-      { name: 'Moon Watchers', desc: 'Maratonas de madrugada toda semana', members: '651', gradient: 'linear-gradient(135deg,#a855f7,#7c3aed)', emoji: '🌙', badge: 'TOP 3' },
-      { name: 'Konoha FC', desc: 'Fãs de Naruto e shounen clássico', members: '512', gradient: 'linear-gradient(135deg,#22c55e,#15803d)', emoji: '🍃', badge: '' },
-    ];
-
-    document.getElementById('community-clans').innerHTML = clans.map(function(c) {
-      return '<div class="clan-card"><div class="clan-emblem" style="background:' + c.gradient + '">' + c.emoji + '</div>' +
-        '<div class="clan-info"><div class="clan-name">' + c.name + '</div><div class="clan-desc">' + c.desc + '</div><div class="clan-members">' + c.members + ' membros</div></div>' +
-        (c.badge ? '<span class="clan-badge">' + c.badge + '</span>' : '') + '</div>';
-    }).join('') + '<button class="action-btn ghost" style="margin-top:12px" onclick="showToast(\'Em breve!\')"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>Criar Novo Clã</button>';
 
     // ── Profile ──
     function renderProfileStats() {
@@ -2077,23 +2207,233 @@
       document.getElementById('detail-body').innerHTML = body;
     }
 
+    // ── Release calendar (Jikan / MyAnimeList) ──
+    // Broadcast times are in Japan time; shows are regrouped by the viewer's own weekday.
+    var CAL_API_DAYS = ['sundays', 'mondays', 'tuesdays', 'wednesdays', 'thursdays', 'fridays', 'saturdays'];
+    var CAL_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    var CAL_TTL = 12 * 60 * 60 * 1000;
+    var calendarItems = null, calendarLoading = null, calendarDay = new Date().getDay();
+
+    function jikanPage(day, page) {
+      return fetch('https://api.jikan.moe/v4/schedules?filter=' + day + '&sfw=true&page=' + page).then(function(r) {
+        if (r.status === 429) return new Promise(function(res) { setTimeout(res, 1500); }).then(function() { return jikanPage(day, page); });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      });
+    }
+
+    // Local weekday and "HH:MM" for a JST weekday + time.
+    function jstToLocal(jstDay, time) {
+      var hm = String(time || '').split(':');
+      if (hm.length < 2) return null;
+      var now = new Date();
+      var base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      var jstToday = new Date(now.getTime() + 9 * 3600000).getUTCDay();
+      base.setUTCDate(base.getUTCDate() + ((jstDay - jstToday + 7) % 7));
+      var d = new Date(base.getTime() + (+hm[0] * 60 + +hm[1]) * 60000 - 9 * 3600000);
+      return { day: d.getDay(), time: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) };
+    }
+
+    function fetchCalendar() {
+      var cached = getStore('calendar');
+      if (cached.at && Date.now() - cached.at < CAL_TTL && cached.items) return Promise.resolve(cached.items);
+      var items = [], seen = {};
+      var chain = Promise.resolve();
+      CAL_API_DAYS.forEach(function(day, jstDay) {
+        [1, 2, 3].forEach(function(page) {
+          chain = chain.then(function(more) {
+            if (page > 1 && !more) return false;
+            return new Promise(function(res) { setTimeout(res, 400); }).then(function() { return jikanPage(day, page); }).then(function(json) {
+              (json.data || []).forEach(function(a) {
+                if (seen[a.mal_id]) return;
+                var when = jstToLocal(jstDay, a.broadcast && a.broadcast.time);
+                if (!when) return;
+                seen[a.mal_id] = true;
+                items.push({ title: a.title, en: a.title_english || '', img: (a.images && (a.images.webp || a.images.jpg) || {}).image_url || '',
+                  day: when.day, time: when.time, eps: a.episodes || 0, score: a.score || 0 });
+              });
+              return !!(json.pagination && json.pagination.has_next_page);
+            });
+          });
+        });
+      });
+      return chain.then(function() {
+        setStore('calendar', { at: Date.now(), items: items });
+        return items;
+      });
+    }
+
+    function loadCalendar() {
+      renderCalendarDays();
+      if (calendarItems) { renderCalendar(); return; }
+      document.getElementById('cal-list').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Carregando lançamentos...</div>';
+      if (!calendarLoading) {
+        calendarLoading = fetchCalendar().then(function(items) {
+          calendarItems = items;
+          renderCalendar();
+        }).catch(function() {
+          document.getElementById('cal-list').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted)">Não foi possível carregar a agenda agora.</div>';
+        }).then(function() { calendarLoading = null; });
+      }
+    }
+
+    function renderCalendarDays() {
+      var today = new Date().getDay();
+      document.getElementById('cal-days').innerHTML = CAL_LABELS.map(function(l, i) {
+        var d = (today + i) % 7;
+        return '<button class="filter-chip' + (d === calendarDay ? ' active' : '') + '" onclick="calendarDay=' + d + ';renderCalendarDays();renderCalendar()">' + (i === 0 ? 'Hoje' : i === 1 ? 'Amanhã' : CAL_LABELS[d]) + '</button>';
+      }).join('');
+    }
+
+    function followedTitles() {
+      var out = {};
+      Object.keys(notifyState.items).forEach(function(k) { out[normalizeTitle(notifyState.items[k].title)] = true; });
+      return out;
+    }
+
+    function normalizeTitle(t) { return String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+
+    function renderCalendar() {
+      if (!calendarItems) return;
+      var follow = followedTitles();
+      var list = calendarItems.filter(function(a) { return a.day === calendarDay; }).sort(function(a, b) { return a.time < b.time ? -1 : 1; });
+      document.getElementById('cal-list').innerHTML = list.length ? list.map(function(a) {
+        var followed = follow[normalizeTitle(a.title)] || follow[normalizeTitle(a.en)];
+        return '<div class="cal-item" onclick="searchFromCalendar(this.dataset.title)" data-title="' + escapeHtml(a.title) + '">' +
+          '<img src="' + escapeHtml(a.img) + '" alt="" loading="lazy">' +
+          '<div style="min-width:0"><div class="cal-time">' + a.time + (followed ? '<span class="cal-follow">Seguindo</span>' : '') + '</div>' +
+          '<div class="cal-title">' + escapeHtml(a.title) + '</div>' +
+          '<div class="cal-sub">' + escapeHtml(a.en && a.en !== a.title ? a.en : '') + (a.eps ? (a.en && a.en !== a.title ? ' · ' : '') + a.eps + ' eps' : '') + (a.score ? ' · ★ ' + a.score : '') + '</div></div></div>';
+      }).join('') + '<div class="party-muted" style="padding:4px 16px">Horários no seu fuso. Os episódios chegam aqui algumas horas depois da estreia no Japão.</div>'
+        : '<div style="padding:40px;text-align:center;color:var(--muted)">Nenhum lançamento neste dia.</div>';
+    }
+
+    function searchFromCalendar(title) {
+      searchInput.value = title;
+      switchTab('explore');
+      doSearch();
+    }
+
+    // ── Moving data to another device ──
+    // Everything lives in this browser; the transfer link carries it in the URL
+    // fragment, which browsers never send to any server.
+    var TRANSFER_KEYS = ['lists', 'settings', 'skipmarks'];
+
+    function collectUserData() {
+      var data = { v: 1, history: getWatchHistory(), follow: notifyState.items };
+      TRANSFER_KEYS.forEach(function(k) { data[k] = getStore(k); });
+      return data;
+    }
+
+    function bytesToB64url(bytes) {
+      var bin = '';
+      for (var i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function b64urlToBytes(str) {
+      var bin = atob(str.replace(/-/g, '+').replace(/_/g, '/'));
+      var out = new Uint8Array(bin.length);
+      for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+
+    function streamBytes(bytes, transform) {
+      return new Response(new Blob([bytes]).stream().pipeThrough(transform)).arrayBuffer().then(function(b) { return new Uint8Array(b); });
+    }
+
+    function encodeUserData(data) {
+      var bytes = new TextEncoder().encode(JSON.stringify(data));
+      if (!window.CompressionStream) return Promise.resolve('j' + bytesToB64url(bytes));
+      return streamBytes(bytes, new CompressionStream('deflate-raw')).then(function(z) { return 'z' + bytesToB64url(z); });
+    }
+
+    function decodeUserData(code) {
+      var bytes = b64urlToBytes(code.slice(1));
+      var p = code[0] === 'z' ? streamBytes(bytes, new DecompressionStream('deflate-raw')) : Promise.resolve(bytes);
+      return p.then(function(b) { return JSON.parse(new TextDecoder().decode(b)); });
+    }
+
+    function mergeUserData(data) {
+      if (!data || data.v !== 1) throw new Error('bad data');
+      var lists = getUserLists();
+      Object.keys(data.lists || {}).forEach(function(name) {
+        var mine = lists[name] || [];
+        (data.lists[name] || []).forEach(function(a) { if (!mine.some(function(x) { return x.id == a.id; })) mine.push(a); });
+        lists[name] = mine;
+      });
+      setUserLists(lists);
+      var byId = {};
+      getWatchHistory().concat(data.history || []).forEach(function(h) {
+        if (!byId[h.id] || (h.updatedAt || 0) > (byId[h.id].updatedAt || 0)) byId[h.id] = h;
+      });
+      setWatchHistory(Object.keys(byId).map(function(k) { return byId[k]; }).sort(function(a, b) { return (b.updatedAt || 0) - (a.updatedAt || 0); }).slice(0, 20));
+      var marks = getStore('skipmarks');
+      Object.keys(data.skipmarks || {}).forEach(function(k) { if (!marks[k]) marks[k] = data.skipmarks[k]; });
+      setStore('skipmarks', marks);
+      var settings = getStore('settings');
+      Object.keys(data.settings || {}).forEach(function(k) { if (!(k in settings)) settings[k] = data.settings[k]; });
+      setStore('settings', settings);
+      Object.keys(data.follow || {}).forEach(function(k) { if (!notifyState.items[k]) notifyState.items[k] = data.follow[k]; });
+      return writeNotifyState().then(function() {
+        renderProfileStats();
+        renderProfileName();
+        renderContinueWatching();
+      });
+    }
+
+    function openTransfer() { openSheet('transfer-sheet'); }
+
+    function shareTransferLink() {
+      encodeUserData(collectUserData()).then(function(code) {
+        var link = location.origin + location.pathname + '#import=' + code;
+        var text = 'Meus dados do AnimeHub: abra este link no outro aparelho';
+        if (navigator.share) { navigator.share({ title: 'AnimeHub', text: text, url: link }).catch(function() {}); return; }
+        if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('Link copiado: abra no outro aparelho'); }, function() { prompt('Copie o link:', link); });
+        else prompt('Copie o link:', link);
+      }).catch(function() { showToast('Não foi possível gerar o link'); });
+    }
+
+    function downloadBackup() {
+      var blob = new Blob([JSON.stringify(collectUserData())], { type: 'application/json' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'animehub-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }
+
+    function restoreBackupFile(input) {
+      var file = input.files && input.files[0];
+      input.value = '';
+      if (!file) return;
+      file.text().then(function(t) { return mergeUserData(JSON.parse(t)); })
+        .then(function() { showToast('Backup restaurado'); closeSheet('transfer-sheet'); })
+        .catch(function() { showToast('Arquivo de backup inválido'); });
+    }
+
+    function importFromHash() {
+      var m = location.hash.match(/^#import=([jz][A-Za-z0-9_-]+)$/);
+      if (!m) return;
+      history.replaceState(null, '', location.pathname + location.search);
+      if (!confirm('Trazer as listas, o histórico e os animes seguidos do outro aparelho para este? Nada daqui será apagado.')) return;
+      decodeUserData(m[1]).then(mergeUserData)
+        .then(function() { showToast('Dados importados!'); })
+        .catch(function() { showToast('Link de transferência inválido ou incompleto'); });
+    }
+
     // ── Navigation ──
     function switchTab(name) {
       document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
       document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
       document.getElementById('page-' + name).classList.add('active');
       var tabs = document.querySelectorAll('.tab');
-      var map = { home: 0, explore: 1, community: 2, ranking: 3, profile: 4 };
+      var map = { home: 0, explore: 1, calendar: 2, ranking: 3, profile: 4 };
       if (map[name] !== undefined) tabs[map[name]].classList.add('active');
       window.scrollTo(0, 0);
       if (name === 'home') renderContinueWatching();
-    }
-
-    function switchCommunityTab(el, tab) {
-      document.querySelectorAll('#page-community .sub-tab').forEach(function(t) { t.classList.remove('active'); });
-      el.classList.add('active');
-      document.getElementById('community-feed').style.display = tab === 'feed' ? 'block' : 'none';
-      document.getElementById('community-clans').style.display = tab === 'clans' ? 'block' : 'none';
+      if (name === 'calendar') loadCalendar();
     }
 
     // ── Offline UX ──
@@ -2117,6 +2457,8 @@
       if (Object.keys(notifyState.items).length) setTimeout(checkNewEpisodes, 3000);
     });
     setInterval(checkNewEpisodes, 30 * 60 * 1000);
+    readNotifyState().then(importFromHash);
+    if (/Android/i.test(navigator.userAgent) && !window.Capacitor) document.getElementById('android-app-item').style.display = '';
     (function handleLaunchParams() {
       var params = new URLSearchParams(location.search);
       var anime = params.get('anime'), code = params.get('party');

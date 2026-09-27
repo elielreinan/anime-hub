@@ -7,8 +7,11 @@ on:
         description: App URL to test (default runs the server locally)
         default: http://localhost:3000/
       only:
-        description: Set to "party" to run only the watch party check
+        description: '"party" runs only the watch party check; "probe" tries new video sources instead'
         default: ''
+  # Daily check that every source still plays; a failure e-mails the repo owner.
+  schedule:
+    - cron: '17 9 * * *'
 
 permissions:
   contents: read
@@ -35,13 +38,17 @@ jobs:
             sleep 10
           done
           echo "Render is not running $GITHUB_SHA yet" && exit 1
+      - name: Probe new video sources
+        if: ${{ inputs.only == 'probe' }}
+        run: node scripts/probe-sources.js
       - name: Playback end-to-end (real Chrome)
+        if: ${{ inputs.only != 'probe' }}
         env:
           APP_URL: ${{ inputs.app_url }}
           ONLY: ${{ inputs.only }}
         run: node scripts/e2e-play.js "${APP_URL:-http://localhost:3000/}"
       - name: Playback end-to-end (WebKit, Safari engine)
-        if: ${{ !cancelled() && (inputs.app_url == '' || startsWith(inputs.app_url, 'http://localhost')) }}
+        if: ${{ !cancelled() && inputs.only != 'probe' && (inputs.app_url == '' || startsWith(inputs.app_url, 'http://localhost')) }}
         env:
           ONLY: ${{ inputs.only }}
         run: npx playwright install --with-deps webkit && BROWSER=webkit node scripts/e2e-play.js

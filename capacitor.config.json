@@ -1,5 +1,9 @@
 {
   "appId": "com.animehub.app",
   "appName": "Anime Hub",
-  "webDir": "docs"
+  "webDir": "docs",
+  "server": {
+    "url": "https://elielreinan.github.io/anime-hub/",
+    "androidScheme": "https"
+  }
 }

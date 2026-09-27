@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v12';
+var CACHE = 'animehub-v13';
 var STATE_CACHE = 'animehub-state';
 
 self.addEventListener('install', function(e) {
@@ -45,7 +45,8 @@ self.addEventListener('fetch', function(e) {
   // Media goes straight to the network: Safari can't play video through a worker that
   // doesn't answer byte ranges, and stream segments must never land in the cache.
   if (req.headers.has('range') || req.destination === 'video' || req.destination === 'audio' || req.destination === 'iframe' ||
-      /\/api\/(?!atv\/)/.test(url.pathname) || /\.(m3u8|ts|m4s|mp4|webm)$/i.test(url.pathname)) return;
+      /\/api\/(?!atv\/)/.test(url.pathname) || /\.(m3u8|ts|m4s|mp4|webm)$/i.test(url.pathname) ||
+      url.hostname === 'api.jikan.moe') return;
 
   // Catalog: network first, cached copy when offline
   if (url.pathname.indexOf('/api/atv/') !== -1) {

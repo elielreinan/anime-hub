@@ -77,6 +77,17 @@ async function runCase(browser, title, ep) {
       const texts = [];
       for (const f of page.frames().slice(1)) texts.push(await f.evaluate(() => (document.body && document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 100)).catch(() => '?'));
       console.log('      frames text: ' + JSON.stringify(texts) + ' | console: ' + logs.slice(-2).join(' | '));
+      // Where the app's own <video> is reading from and how far it got.
+      const media = await page.evaluate(() => {
+        const v = document.getElementById('player-video'), e = playerEmbeds[playerServerIndex] || {};
+        const src = (window._hls && window._hls.url) || v.currentSrc || '';
+        let where = '';
+        try { const u = new URL(src, location.href); where = u.host + u.pathname.slice(0, 40); } catch (err) { where = src.slice(0, 40); }
+        const buf = v.buffered.length ? v.buffered.start(0).toFixed(1) + '-' + v.buffered.end(v.buffered.length - 1).toFixed(1) : 'none';
+        return { kind: e.kind, proxied: /\/api\/(hls|embed)-proxy/.test(src), hlsjs: !!window._hls, from: where, net: v.networkState, buffered: buf,
+          paused: v.paused, size: v.videoWidth + 'x' + v.videoHeight, dur: +(v.duration || 0).toFixed(1) };
+      }).catch(err => ({ error: err.message }));
+      console.log('      media: ' + JSON.stringify(media));
     }
   }
   console.log('   => ' + (ok ? 'OK' : 'FAIL'));
@@ -112,8 +123,13 @@ async function partyCase(browser, title, ep) {
   await a.waitForTimeout(8000);
   const ta = await a.evaluate(() => document.getElementById('player-video').currentTime);
   const tb = await b.evaluate(() => document.getElementById('player-video').currentTime);
-  const ok = followed && Math.abs(ta - tb) < 3 && tb > 100;
-  console.log('\nparty ' + code + ' (' + title + ') [' + ENGINE + ']: B followed=' + followed + ' A=' + ta.toFixed(1) + 's B=' + tb.toFixed(1) + 's => ' + (ok ? 'OK' : 'FAIL'));
+  // One vote is enough in a room of two: both must move to the next episode.
+  await a.evaluate(() => voteNext());
+  const next = ep + 1;
+  const voted = await Promise.all([a, b].map(p => p.waitForFunction(n => playerEpisode === n, next, { timeout: 60000 }).then(() => true, () => false)))
+    .then(r => r.every(Boolean));
+  const ok = followed && Math.abs(ta - tb) < 3 && tb > 100 && voted;
+  console.log('\nparty ' + code + ' (' + title + ') [' + ENGINE + ']: B followed=' + followed + ' A=' + ta.toFixed(1) + 's B=' + tb.toFixed(1) + 's vote->ep' + next + '=' + voted + ' => ' + (ok ? 'OK' : 'FAIL'));
   if (!ok) {
     console.log('   A log: ' + JSON.stringify(await a.evaluate(() => window._plog || [])));
     console.log('   B log: ' + JSON.stringify(await b.evaluate(() => window._plog || [])));
