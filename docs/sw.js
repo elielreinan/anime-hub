@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v13';
+var CACHE = 'animehub-v14';
 var STATE_CACHE = 'animehub-state';
 
 self.addEventListener('install', function(e) {
@@ -11,7 +11,20 @@ self.addEventListener('install', function(e) {
         scope + 'manifest.json',
         scope + 'icon-192.png',
         scope + 'icon-512.png',
-        scope + 'vendor/hls.min.js'
+        scope + 'vendor/hls.min.js',
+        scope + 'css/app.css',
+        scope + 'js/account.js',
+        scope + 'js/app.js',
+        scope + 'js/calendar.js',
+        scope + 'js/core.js',
+        scope + 'js/detail.js',
+        scope + 'js/home.js',
+        scope + 'js/notifications.js',
+        scope + 'js/party.js',
+        scope + 'js/player.js',
+        scope + 'js/profile.js',
+        scope + 'js/settings.js',
+        scope + 'js/transfer.js'
       ]);
     }).then(function() { return self.skipWaiting(); })
   );
@@ -76,7 +89,13 @@ self.addEventListener('fetch', function(e) {
     return;
   }
 
-  // App files (scripts, manifest, icons): cache first
+  // App code: network first, so a deploy never mixes a new page with old scripts
+  if (url.origin === self.location.origin && /\.(js|css|html)$/.test(url.pathname)) {
+    e.respondWith(networkFirst(req, function() { return caches.match(req); }));
+    return;
+  }
+
+  // Manifest, icons: cache first
   if (url.origin === self.location.origin) {
     e.respondWith(caches.match(req).then(function(cached) {
       return cached || fetch(req).then(function(r) {

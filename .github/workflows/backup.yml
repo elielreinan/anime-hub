@@ -1,0 +1,58 @@
+name: backup
+
+# Weekly encrypted dump of the accounts database, kept 30 days as a workflow artifact.
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   DATABASE_URL       the same Neon connection string used on Render
+#   BACKUP_PASSPHRASE  a long random password, kept somewhere safe (without it the backup can't be opened)
+# Artifacts of a public repo can be downloaded by anyone logged in to GitHub, which is
+# why the dump is encrypted before upload. To restore:
+#   openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in animehub.dump.enc -out animehub.dump
+#   pg_restore --clean --if-exists --no-owner -d "$DATABASE_URL" animehub.dump
+on:
+  schedule:
+    - cron: '23 5 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check secrets
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$BACKUP_PASSPHRASE" ]; then
+            echo "::notice::Backup skipped: set the DATABASE_URL and BACKUP_PASSPHRASE secrets to enable it."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install the latest pg_dump
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSo /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Dump and encrypt
+        if: steps.check.outputs.ready == 'true'
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -o pipefail
+          pg_dump --format=custom --no-owner "$DATABASE_URL" \
+            | openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:BACKUP_PASSPHRASE -out animehub.dump.enc
+          ls -la animehub.dump.enc
+      - uses: actions/upload-artifact@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          name: animehub-db-${{ github.run_id }}
+          path: animehub.dump.enc
+          retention-days: 30
