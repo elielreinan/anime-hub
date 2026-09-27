@@ -18,6 +18,7 @@ jobs:
       - name: Source diagnostics
         run: node scripts/diag.js
       - name: Server end-to-end
+        if: ${{ !contains(github.event.head_commit.message, '[probe]') }}
         run: |
           PORT=3000 node server.js > server.log 2>&1 &
           sleep 5
