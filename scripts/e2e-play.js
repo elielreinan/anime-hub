@@ -9,19 +9,26 @@ const CASES = [
   ['One Piece', 1000],
 ];
 
-async function probeEmbed(browser, embed) {
+// Host the iframe on the real app origin so embeds see the same Referer users send.
+const APP_ORIGIN = 'https://elielreinan.github.io';
+
+async function probeEmbed(browser, embed, referrerPolicy) {
   const page = await browser.newPage();
-  const errors = [];
-  page.on('pageerror', e => errors.push(e.message.slice(0, 120)));
-  await page.goto(API + '/', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(url => {
-    document.body.innerHTML = '';
+  const net = [];
+  page.on('response', r => {
+    const u = r.url();
+    if (/mode=|m3u8|\.mp4|videoplayback|api/i.test(u) && !/google-analytics|gtag|doubleclick/.test(u)) net.push(r.status() + ' ' + u.slice(0, 110));
+  });
+  await page.route(APP_ORIGIN + '/anime-hub/player-test', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><body style="margin:0"></body>' }));
+  await page.goto(APP_ORIGIN + '/anime-hub/player-test');
+  await page.evaluate(([url, rp]) => {
     const f = document.createElement('iframe');
     f.src = url;
     f.allow = 'autoplay; encrypted-media; fullscreen';
+    if (rp) f.referrerPolicy = rp;
     f.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0';
     document.body.appendChild(f);
-  }, embed.url);
+  }, [embed.url, referrerPolicy]);
   await page.waitForTimeout(8000);
   await page.mouse.click(640, 360).catch(() => {});
   await page.waitForTimeout(4000);
@@ -41,9 +48,15 @@ async function probeEmbed(browser, embed) {
     if (vids.length) found.push({ frame: frame.url().slice(0, 70), vids });
   }
   const playing = found.some(f => f.vids.some(v => v.t > 0.5));
-  console.log('   ' + (playing ? 'PLAYING' : 'NO-PLAY') + ' ' + embed.label + ' | ' + embed.url.slice(0, 90));
+  console.log('   ' + (playing ? 'PLAYING' : 'NO-PLAY') + ' [' + (referrerPolicy || 'default') + '] ' + embed.label + ' | ' + embed.url.slice(0, 90));
   found.forEach(f => console.log('      frame ' + f.frame + ' -> ' + JSON.stringify(f.vids)));
-  if (!found.length) console.log('      no <video> in ' + page.frames().length + ' frames; errors: ' + errors.slice(0, 3).join(' | '));
+  if (!playing) {
+    for (const frame of page.frames().slice(1)) {
+      const text = await frame.evaluate(() => (document.body && document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 160)).catch(() => '?');
+      console.log('      text ' + frame.url().slice(0, 60) + ' :: ' + text);
+    }
+    net.slice(0, 8).forEach(n => console.log('      net ' + n));
+  }
   await page.close();
   return playing;
 }
@@ -58,7 +71,11 @@ async function probeEmbed(browser, embed) {
     console.log('\n' + title + ' ep ' + ep + ': ' + embeds.length + ' players in ' + (Date.now() - t) + 'ms');
     console.log('   trace ' + JSON.stringify(r.trace));
     let ok = false;
-    for (const e of embeds.slice(0, 4)) ok = (await probeEmbed(browser, e)) || ok;
+    for (const e of embeds.slice(0, 4)) {
+      let played = await probeEmbed(browser, e, '');
+      if (!played) played = await probeEmbed(browser, e, 'no-referrer');
+      ok = played || ok;
+    }
     console.log('   => ' + (ok ? 'OK: at least one player plays' : 'FAIL: nothing played'));
     if (!ok) anyCaseFailed = true;
   }
