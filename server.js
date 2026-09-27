@@ -327,7 +327,7 @@ function getEpisodeEmbeds(site, episodeUrl, trace) {
   });
 }
 
-var DEAD_EMBED_TEXT = /no longer available|has been deleted|file (?:was )?(?:not found|deleted|removed)|domain may be for sale|video (?:is )?unavailable/i;
+var DEAD_EMBED_TEXT = /no longer available|can't find the video|has been deleted|file (?:was )?(?:not found|deleted|removed)|domain may be for sale|video (?:is )?unavailable/i;
 var QUALITY_ORDER = [/1080|FHD|FULL/i, /720|HD/i, /480|SD/i, /LD|360/i];
 
 function qualityRank(q) {
