@@ -63,7 +63,7 @@ function getAiringShows() {
 function jikanCard(a) {
   var img = (a.images && (a.images.webp || a.images.jpg) || {}).image_url || '';
   return { title: a.title, en: a.title_english || '', img: img, score: a.score || 0, year: a.year || (a.aired && a.aired.prop && a.aired.prop.from && a.aired.prop.from.year) || '',
-    eps: a.episodes || 0, trailer: a.trailer && a.trailer.youtube_id ? a.trailer.youtube_id : '', genres: (a.genres || []).map(function(g) { return g.name; }).slice(0, 3), status: a.status || '' };
+    eps: a.episodes || 0, trailer: a.trailer && a.trailer.youtube_id ? a.trailer.youtube_id : '', genres: (a.genres || []).concat(a.themes || []).map(function(g) { return g.name; }), status: a.status || '', members: a.members || 0 };
 }
 
 var discoverCards = {};
@@ -122,16 +122,45 @@ function explorefilters() {
     order: document.getElementById('f-order').value, genre: currentGenre };
 }
 
-// Search with MyAnimeList filters (genre, status, year, order).
+var GENRE_EN = { 'Ação': 'Action', 'Aventura': 'Adventure', 'Comédia': 'Comedy', 'Drama': 'Drama', 'Fantasia': 'Fantasy', 'Terror': 'Horror', 'Mecha': 'Mecha', 'Música': 'Music',
+  'Mistério': 'Mystery', 'Romance': 'Romance', 'Sci-Fi': 'Sci-Fi', 'Esportes': 'Sports', 'Sobrenatural': 'Supernatural', 'Suspense': 'Suspense', 'Slice of Life': 'Slice of Life', 'Isekai': 'Isekai' };
+
+// Genre / year / order applied here, on lists we already have.
+function applyLocalFilters(list, q, f) {
+  var nq = normalizeTitle(q);
+  var out = list.filter(function(c) {
+    if (nq && normalizeTitle(c.title + ' ' + c.en).indexOf(nq) === -1) return false;
+    if (f.genre && c.genres.indexOf(GENRE_EN[f.genre]) === -1) return false;
+    if (f.year && String(c.year) !== String(f.year)) return false;
+    return true;
+  });
+  var by = { score: function(a, b) { return (b.score || 0) - (a.score || 0); }, title: function(a, b) { return a.title.localeCompare(b.title); },
+    start_date: function(a, b) { return (b.year || 0) - (a.year || 0); } }[f.order] || function(a, b) { return (b.members || 0) - (a.members || 0); };
+  return out.sort(by);
+}
+
+// Filters: "Em lançamento" and "Em breve" come from the season lists (reliable and
+// cached); anything else goes to MyAnimeList's search, which is often slow.
 function filteredSearch(q, f) {
+  if (f.status === 'airing') return getAiringShows().then(function(list) { return applyLocalFilters(list, q, f); });
+  if (f.status === 'upcoming') {
+    var up = seasonCache.upcoming ? Promise.resolve(seasonCache.upcoming) : jikanGet('/seasons/upcoming?sfw=true').then(function(j) { return (j.data || []).map(jikanCard); });
+    return up.then(function(list) { return applyLocalFilters(list, q, f); });
+  }
   var qs = ['sfw=true', 'limit=24'];
   if (q) qs.push('q=' + encodeURIComponent(q));
   if (f.genre && GENRE_IDS[f.genre]) qs.push('genres=' + GENRE_IDS[f.genre]);
   if (f.status) qs.push('status=' + f.status);
   if (f.year) qs.push('start_date=' + f.year + '-01-01', 'end_date=' + f.year + '-12-31');
-  if (f.order) qs.push('order_by=' + f.order, 'sort=' + (f.order === 'title' || f.order === 'popularity' ? 'asc' : 'desc'));
-  else if (!q) qs.push('order_by=members', 'sort=desc');
-  return jikanGet('/anime?' + qs.join('&')).then(function(j) { return (j.data || []).map(jikanCard); });
+  if (f.order) qs.push('order_by=' + f.order, 'sort=' + (f.order === 'title' ? 'asc' : 'desc'));
+  return jikanGet('/anime?' + qs.join('&')).then(function(j) { return (j.data || []).map(jikanCard); }, function() {
+    // Search is down: at least filter what's airing.
+    return getAiringShows().then(function(list) {
+      var res = applyLocalFilters(list, q, f);
+      res.fallback = true;
+      return res;
+    });
+  });
 }
 
 // ── Recommendations (from what you watched and favorited) ──

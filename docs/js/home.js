@@ -174,9 +174,10 @@ function doSearch() {
 
   if (f.genre || f.status || f.year || f.order) {
     filteredSearch(q, f).then(function(list) {
-      done(list.length ? '<div class="party-muted" style="padding:0 16px 8px">Resultados do MyAnimeList: toque para abrir no catálogo.</div><div class="anime-grid">' +
+      var note = list.fallback ? 'A busca do MyAnimeList está fora do ar agora; mostrando só os animes em lançamento.' : 'Resultados do MyAnimeList: toque para abrir no catálogo.';
+      done(list.length ? '<div class="party-muted" style="padding:0 16px 8px">' + note + '</div><div class="anime-grid">' +
         list.map(function(c, i) { return discoverCardHtml(c, 'srch' + i, true); }).join('') + '</div>' : empty, list.length);
-    }).catch(function() { done('<div class="empty-state">Erro ao buscar com filtros</div>'); });
+    }).catch(function() { done('<div class="empty-state">O MyAnimeList não respondeu agora. Tente de novo em instantes.</div>'); });
     return;
   }
 
