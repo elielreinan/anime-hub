@@ -244,6 +244,13 @@
     .skip-btn { background: rgba(255,90,38,0.2); border: 1px solid var(--accent); color: var(--accent); padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.2s; display: none; }
     .skip-btn.show { display: block; }
     .skip-btn:active { transform: scale(0.95); background: var(--accent); color: #fff; }
+    .player-overlay.embed-mode .player-top, .player-overlay.embed-mode .player-controls { position: static; background: #000; }
+    .player-overlay.embed-mode .player-controls { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
+    .player-overlay.embed-mode .player-progress, .player-overlay.embed-mode #play-pause-btn, .player-overlay.embed-mode .skip-btn { display: none; }
+    .player-servers { display: none; gap: 8px; overflow-x: auto; margin-bottom: 8px; scrollbar-width: none; }
+    .player-overlay.embed-mode .player-servers { display: flex; }
+    .server-btn { flex-shrink: 0; background: #1f1f2e; border: 1px solid #374151; color: #d1d5db; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
+    .server-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(255,90,38,0.12); }
 
     /* Loading */
     .skeleton { background: linear-gradient(90deg, var(--card) 25%, #252535 50%, var(--card) 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 10px; }
@@ -405,7 +412,7 @@
     </div>
     <div class="player-body" id="player-body">
       <video id="player-video" style="width:100%;height:100%;background:#000;display:none" playsinline controls></video>
-      <iframe id="player-iframe" style="width:100%;height:100%;border:none;display:none" allowfullscreen></iframe>
+      <iframe id="player-iframe" style="width:100%;height:100%;border:none;display:none" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowfullscreen></iframe>
       <div class="player-placeholder" id="player-placeholder">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         <p id="player-status">Buscando episódio...</p>
@@ -413,6 +420,7 @@
       </div>
     </div>
     <div class="player-controls">
+      <div class="player-servers" id="player-servers"></div>
       <div class="player-progress" id="player-progress" onclick="seekPlayer(event)">
         <div class="player-progress-fill" id="player-progress-fill" style="width:0%"></div>
       </div>
@@ -938,6 +946,8 @@
       videoEl.removeAttribute('src');
       var iframe = document.getElementById('player-iframe');
       if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
+      document.getElementById('player-overlay').classList.remove('embed-mode');
+      document.getElementById('player-servers').innerHTML = '';
       document.getElementById('player-placeholder').style.display = 'flex';
       document.getElementById('player-status').textContent = 'Buscando episódio...';
       document.getElementById('player-spinner').style.display = 'block';
@@ -959,12 +969,8 @@
       fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
         if (!data.error && data.data) {
           var d = data.data;
-          if (d.type === 'direct' && d.video_url) {
-            loadVideo(d.video_url, d.isM3U8 || false, d.referer || '');
-          } else if (d.type === 'embed' && d.embed_url) {
-            loadEmbed(d.embed_url);
-          } else if (d.type === 'embed' && d.embed_urls && d.embed_urls.length > 0) {
-            loadEmbed(d.embed_urls[0]);
+          if (d.embeds && d.embeds.length) {
+            loadEmbeds(d.embeds);
           } else if (d.video_url) {
             loadVideo(d.video_url, d.isM3U8 || false, d.referer || '');
           } else {
@@ -983,11 +989,33 @@
       document.getElementById('player-status').innerHTML = msg + '<br><button onclick="closePlayer()" style="margin-top:16px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Voltar</button>';
     }
 
+    var playerEmbeds = [];
+
+    function loadEmbeds(embeds) {
+      playerEmbeds = embeds;
+      var bar = document.getElementById('player-servers');
+      bar.innerHTML = '';
+      embeds.forEach(function(e, i) {
+        var btn = document.createElement('button');
+        btn.className = 'server-btn';
+        btn.textContent = (i + 1) + '. ' + e.label;
+        btn.onclick = function() { selectServer(i); };
+        bar.appendChild(btn);
+      });
+      selectServer(0);
+    }
+
+    function selectServer(i) {
+      var buttons = document.getElementById('player-servers').children;
+      for (var k = 0; k < buttons.length; k++) buttons[k].classList.toggle('active', k === i);
+      loadEmbed(playerEmbeds[i].url);
+    }
+
     function loadEmbed(embedUrl) {
       playerHasVideo = true;
+      document.getElementById('player-overlay').classList.add('embed-mode');
       var iframe = document.getElementById('player-iframe');
-      var proxyUrl = getApiBase() + '/api/proxy?url=' + encodeURIComponent(embedUrl);
-      iframe.src = proxyUrl;
+      iframe.src = embedUrl;
       iframe.style.display = 'block';
       document.getElementById('player-video').style.display = 'none';
       document.getElementById('player-placeholder').style.display = 'none';
@@ -1002,6 +1030,7 @@
 
     function loadVideo(videoUrl, isHLS, referer) {
       playerHasVideo = true;
+      document.getElementById('player-overlay').classList.remove('embed-mode');
       videoEl = document.getElementById('player-video');
       videoEl.style.display = 'block';
       document.getElementById('player-iframe').style.display = 'none';
@@ -1110,7 +1139,7 @@
       if (videoEl) videoEl.pause();
       if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
       playerPlaying = false;
-      document.getElementById('player-overlay').classList.remove('show');
+      document.getElementById('player-overlay').classList.remove('show', 'embed-mode');
 
       if (currentAnime && progress > 0) {
         saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), getCover(currentAnime), playerEpisode, progress, playerTotalEps);
