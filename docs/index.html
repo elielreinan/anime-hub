@@ -294,6 +294,13 @@
     /* Cookie banner */
     .cookie-banner { display: none; position: fixed; left: 12px; right: 12px; bottom: 84px; z-index: 250; background: #15151f; border: 1px solid #2d2d3d; border-radius: 14px; padding: 14px 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); font-size: 13px; color: #d1d5db; line-height: 1.5; max-width: 560px; margin: 0 auto; }
     .cookie-banner.show { display: block; }
+    .beta-badge { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 6px; background: rgba(255,90,38,0.15); border: 1px solid var(--accent); color: var(--accent); font-size: 10px; font-weight: 800; letter-spacing: 1px; vertical-align: middle; font-style: normal; cursor: pointer; }
+    .beta-backdrop { display: none; position: fixed; inset: 0; z-index: 400; background: rgba(0,0,0,0.7); align-items: center; justify-content: center; padding: 16px; }
+    .beta-backdrop.show { display: flex; }
+    .beta-modal { width: min(100%, 420px); background: #15151f; border: 1px solid var(--accent); border-radius: 16px; padding: 22px 20px; text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+    .beta-modal h2 { font-size: 20px; font-weight: 900; margin: 8px 0; }
+    .beta-modal p { font-size: 14px; color: #d1d5db; line-height: 1.55; margin-bottom: 10px; }
+    .beta-modal .party-btn { width: 100%; margin-top: 6px; }
     .cookie-banner .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
 
     /* Episode ranges */
@@ -353,7 +360,7 @@
 <body>
 
   <header class="header">
-    <h1 class="logo"><span class="logo-accent">ANIME</span>HUB</h1>
+    <h1 class="logo"><span class="logo-accent">ANIME</span>HUB<em class="beta-badge" onclick="showBetaNotice()" title="Versão de testes">BETA</em></h1>
     <div class="header-actions">
       <button class="header-btn header-party" id="header-party-btn" aria-label="Assistir junto" onclick="openPartySheet()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span id="header-party-label">Juntos</span></button>
       <button class="header-btn" aria-label="Notificações" onclick="openNotifications()"><span class="badge-dot" id="notif-dot"></span>
@@ -594,6 +601,16 @@
   <button class="party-pill" id="party-pill" onclick="openPartySheet()"></button>
 
   <!-- COOKIES -->
+  <div class="beta-backdrop" id="beta-notice" role="dialog" aria-modal="true" aria-labelledby="beta-title">
+    <div class="beta-modal">
+      <div style="font-size:36px">🧪</div>
+      <h2 id="beta-title">Estamos em fase de testes</h2>
+      <p>O AnimeHub ainda está sendo construído. Alguns episódios, servidores ou funções podem falhar de vez em quando.</p>
+      <p>Se um episódio não tocar, tente outro servidor na lista abaixo do vídeo. Obrigado pela paciência!</p>
+      <button class="party-btn" onclick="closeBetaNotice()">Entendi</button>
+    </div>
+  </div>
+
   <div class="cookie-banner" id="cookie-banner" role="dialog" aria-label="Aviso de cookies">
     Usamos cookies e o armazenamento do navegador para guardar suas listas, progresso, configurações e notificações. Nada disso é vendido ou usado para anúncios.
     <div class="row"><button class="party-btn" onclick="acceptCookies()">Entendi</button></div>
@@ -1686,6 +1703,18 @@
     }
 
     // ── Cookies ──
+    // Shown every time the site or app is opened (once per visit).
+    function showBetaNotice() { document.getElementById('beta-notice').classList.add('show'); }
+    function closeBetaNotice() {
+      document.getElementById('beta-notice').classList.remove('show');
+      try { sessionStorage.setItem('ah_beta_seen', '1'); } catch (e) {}
+    }
+    (function initBetaNotice() {
+      var seen = false;
+      try { seen = !!sessionStorage.getItem('ah_beta_seen'); } catch (e) {}
+      if (!seen) showBetaNotice();
+    })();
+
     function initCookieBanner() {
       var ok = false;
       try { ok = !!localStorage.getItem('ah_cookie_ok'); } catch (e) {}

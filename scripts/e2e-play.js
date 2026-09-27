@@ -26,7 +26,11 @@ async function videoProgress(frame) {
 
 // Reload once the service worker is active so it controls the page, as it does for
 // returning users (a first visit is not controlled and hides worker bugs).
+// The "beta" notice shown on every visit would sit on top of the player.
+const skipBetaNotice = page => page.addInitScript(() => { try { sessionStorage.setItem('ah_beta_seen', '1'); } catch (e) {} });
+
 async function openApp(page, url) {
+  await skipBetaNotice(page);
   await page.goto(url, { waitUntil: 'load' });
   const controlled = await page.evaluate(() => Promise.race([
     navigator.serviceWorker.ready.then(() => true),
@@ -104,6 +108,7 @@ async function partyCase(browser, title, ep) {
   await a.waitForFunction(() => party && document.querySelector('.party-code'), null, { timeout: 60000 });
   const code = await a.evaluate(() => party.code);
   const b = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  await skipBetaNotice(b);
   await b.goto(APP + '?party=' + code, { waitUntil: 'load' });
   await a.waitForFunction(() => party.members === 2, null, { timeout: 30000 }).catch(() => {});
   // Muted like a viewer who already tapped play: browsers block unmuted autoplay without a gesture.
