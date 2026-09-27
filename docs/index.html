@@ -1299,7 +1299,9 @@
 
     videoEl.addEventListener('play', function() { if (!isOwnMediaEvent('play')) partyLocalAction('play'); });
     videoEl.addEventListener('pause', function() { if (!isOwnMediaEvent('pause') && !videoEl.ended) partyLocalAction('pause'); });
-    videoEl.addEventListener('seeked', function() { if (!isOwnMediaEvent('seek')) partyLocalAction('seek'); });
+    // 'seeking' carries the target time right away; 'seeked' waits for the new position to
+    // buffer, which on Safari can take long enough that the room never hears about the seek.
+    videoEl.addEventListener('seeking', function() { if (!isOwnMediaEvent('seek')) partyLocalAction('seek'); });
 
     function saveCurrentProgress(forcePct) {
       if (!currentAnime || !playerEpisode) return;
