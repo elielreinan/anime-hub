@@ -246,7 +246,7 @@
     .skip-btn:active { transform: scale(0.95); background: var(--accent); color: #fff; }
     .player-overlay.embed-mode .player-top, .player-overlay.embed-mode .player-controls { position: static; background: #000; }
     .player-overlay.embed-mode .player-controls { padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); }
-    .player-overlay.embed-mode .player-progress, .player-overlay.embed-mode #play-pause-btn, .player-overlay.embed-mode .skip-btn { display: none; }
+    .player-overlay.iframe-mode .player-progress, .player-overlay.iframe-mode #play-pause-btn, .player-overlay.iframe-mode .skip-btn { display: none; }
     .player-servers { display: none; gap: 8px; overflow-x: auto; margin-bottom: 8px; scrollbar-width: none; }
     .player-overlay.embed-mode .player-servers { display: flex; }
     .server-btn { flex-shrink: 0; background: #1f1f2e; border: 1px solid #374151; color: #d1d5db; padding: 6px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: inherit; white-space: nowrap; }
@@ -946,7 +946,7 @@
       videoEl.removeAttribute('src');
       var iframe = document.getElementById('player-iframe');
       if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
-      document.getElementById('player-overlay').classList.remove('embed-mode');
+      document.getElementById('player-overlay').classList.remove('embed-mode', 'iframe-mode');
       document.getElementById('player-servers').innerHTML = '';
       document.getElementById('player-placeholder').style.display = 'flex';
       document.getElementById('player-status').textContent = 'Buscando episódio...';
@@ -993,6 +993,7 @@
 
     function loadEmbeds(embeds) {
       playerEmbeds = embeds;
+      document.getElementById('player-overlay').classList.add('embed-mode');
       var bar = document.getElementById('player-servers');
       bar.innerHTML = '';
       embeds.forEach(function(e, i) {
@@ -1008,12 +1009,24 @@
     function selectServer(i) {
       var buttons = document.getElementById('player-servers').children;
       for (var k = 0; k < buttons.length; k++) buttons[k].classList.toggle('active', k === i);
-      loadEmbed(playerEmbeds[i].url);
+      var e = playerEmbeds[i];
+      if (e.kind === 'hls') loadVideo(e.url, true, '');
+      else loadEmbed(e.url);
+    }
+
+    function stopVideo() {
+      if (window._hls) { try { window._hls.destroy(); } catch(e) {} window._hls = null; }
+      var v = document.getElementById('player-video');
+      v.onerror = v.ontimeupdate = v.onended = null;
+      v.pause();
+      v.removeAttribute('src');
+      v.load();
     }
 
     function loadEmbed(embedUrl) {
       playerHasVideo = true;
-      document.getElementById('player-overlay').classList.add('embed-mode');
+      stopVideo();
+      document.getElementById('player-overlay').classList.add('iframe-mode');
       var iframe = document.getElementById('player-iframe');
       iframe.src = embedUrl;
       iframe.style.display = 'block';
@@ -1030,10 +1043,12 @@
 
     function loadVideo(videoUrl, isHLS, referer) {
       playerHasVideo = true;
-      document.getElementById('player-overlay').classList.remove('embed-mode');
+      document.getElementById('player-overlay').classList.remove('iframe-mode');
       videoEl = document.getElementById('player-video');
       videoEl.style.display = 'block';
-      document.getElementById('player-iframe').style.display = 'none';
+      var iframe = document.getElementById('player-iframe');
+      iframe.src = 'about:blank';
+      iframe.style.display = 'none';
       document.getElementById('player-placeholder').style.display = 'none';
 
       // Cleanup previous HLS instance
@@ -1139,7 +1154,7 @@
       if (videoEl) videoEl.pause();
       if (iframe) { iframe.src = ''; iframe.style.display = 'none'; }
       playerPlaying = false;
-      document.getElementById('player-overlay').classList.remove('show', 'embed-mode');
+      document.getElementById('player-overlay').classList.remove('show', 'embed-mode', 'iframe-mode');
 
       if (currentAnime && progress > 0) {
         saveWatchProgress(currentAnime.id, getTitle(currentAnime), getCover(currentAnime), getCover(currentAnime), playerEpisode, progress, playerTotalEps);

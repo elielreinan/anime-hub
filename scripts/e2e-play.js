@@ -1,84 +1,79 @@
-// End-to-end check: ask the local server for an episode's players, load each one in real Chrome
-// inside our app's page, and report whether a <video> actually advances.
+// End-to-end playback check through the real app UI in real Chrome:
+// open the player via the app's own openPlayer(), then try each server button
+// and report whether a video actually advances.
+// Usage: node scripts/e2e-play.js [appUrl]   (default http://localhost:3000/)
 const { chromium } = require('playwright');
 
-const API = 'http://localhost:3000';
+const APP = process.argv[2] || 'http://localhost:3000/';
 const CASES = [
   ['Death Note', 1],
   ['Naruto Shippuden (Naruto Shippuuden)', 451],
   ['One Piece', 1000],
 ];
 
-// Host the iframe on the real app origin so embeds see the same Referer users send.
-const APP_ORIGIN = 'https://elielreinan.github.io';
+async function videoProgress(frame) {
+  return frame.evaluate(async () => {
+    const vids = Array.from(document.querySelectorAll('video')).filter(v => v.currentSrc || v.src);
+    for (const v of vids) { v.muted = true; try { await v.play(); } catch (e) {} }
+    const before = vids.map(v => v.currentTime);
+    await new Promise(r => setTimeout(r, 6000));
+    return vids.map((v, i) => ({ adv: +(v.currentTime - before[i]).toFixed(1), t: +v.currentTime.toFixed(1), ready: v.readyState, err: v.error && v.error.code }));
+  }).catch(() => []);
+}
 
-async function probeEmbed(browser, embed, referrerPolicy) {
-  const page = await browser.newPage();
-  const net = [];
-  page.on('response', r => {
-    const u = r.url();
-    if (/mode=|m3u8|\.mp4|videoplayback|api/i.test(u) && !/google-analytics|gtag|doubleclick/.test(u)) net.push(r.status() + ' ' + u.slice(0, 110));
-  });
-  await page.route(APP_ORIGIN + '/anime-hub/player-test', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><body style="margin:0"></body>' }));
-  await page.goto(APP_ORIGIN + '/anime-hub/player-test');
-  await page.evaluate(([url, rp]) => {
-    const f = document.createElement('iframe');
-    f.src = url;
-    f.allow = 'autoplay; encrypted-media; fullscreen';
-    if (rp) f.referrerPolicy = rp;
-    f.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;border:0';
-    document.body.appendChild(f);
-  }, [embed.url, referrerPolicy]);
-  await page.waitForTimeout(8000);
-  await page.mouse.click(640, 360).catch(() => {});
-  await page.waitForTimeout(4000);
-
-  const found = [];
-  for (const frame of page.frames()) {
-    const vids = await frame.evaluate(async () => {
-      const out = [];
-      for (const v of document.querySelectorAll('video')) {
-        v.muted = true;
-        try { await v.play(); } catch (e) {}
-        out.push(v);
-      }
-      await new Promise(r => setTimeout(r, 6000));
-      return out.map(v => ({ t: +v.currentTime.toFixed(1), ready: v.readyState, err: v.error && v.error.code, src: (v.currentSrc || '').slice(0, 80) }));
-    }).catch(e => [{ evalError: e.message.slice(0, 80) }]);
-    if (vids.length) found.push({ frame: frame.url().slice(0, 70), vids });
+async function runCase(browser, title, ep) {
+  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const logs = [];
+  page.on('console', m => { if (m.type() === 'error') logs.push(m.text().slice(0, 140)); });
+  await page.goto(APP, { waitUntil: 'load' });
+  const t0 = Date.now();
+  await page.evaluate(([title, ep]) => {
+    currentAnime = { id: 1, category_name: title };
+    openPlayer(1, ep, 9999);
+  }, [title, ep]);
+  await page.waitForFunction(() => document.querySelectorAll('.server-btn').length > 0 || /indispon|não disponível|Erro/i.test(document.getElementById('player-status').textContent), null, { timeout: 90000 }).catch(() => {});
+  const servers = await page.$$eval('.server-btn', bs => bs.map(b => b.textContent));
+  console.log('\n' + title + ' ep ' + ep + ': ' + servers.length + ' servers in ' + (Date.now() - t0) + 'ms ' + JSON.stringify(servers));
+  if (!servers.length) {
+    console.log('   status: ' + (await page.textContent('#player-status')) + ' | console: ' + logs.slice(0, 3).join(' | '));
+    await page.close();
+    return false;
   }
-  const playing = found.some(f => f.vids.some(v => v.t > 0.5));
-  console.log('   ' + (playing ? 'PLAYING' : 'NO-PLAY') + ' [' + (referrerPolicy || 'default') + '] ' + embed.label + ' | ' + embed.url.slice(0, 90));
-  found.forEach(f => console.log('      frame ' + f.frame + ' -> ' + JSON.stringify(f.vids)));
-  if (!playing) {
-    for (const frame of page.frames().slice(1)) {
-      const text = await frame.evaluate(() => (document.body && document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 160)).catch(() => '?');
-      console.log('      text ' + frame.url().slice(0, 60) + ' :: ' + text);
+
+  let ok = false;
+  for (let i = 0; i < Math.min(servers.length, 5); i++) {
+    await page.evaluate(i => selectServer(i), i);
+    await page.waitForTimeout(8000);
+    const iframeMode = await page.evaluate(() => document.getElementById('player-overlay').classList.contains('iframe-mode'));
+    if (iframeMode) {
+      const box = await page.$eval('#player-iframe', el => { const r = el.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; });
+      await page.mouse.click(box.x, box.y).catch(() => {});
+      await page.waitForTimeout(3000);
     }
-    net.slice(0, 8).forEach(n => console.log('      net ' + n));
+    const results = [];
+    for (const f of page.frames()) {
+      const vids = await videoProgress(f);
+      if (vids.length) results.push({ frame: f.url().slice(0, 50), vids });
+    }
+    const playing = results.some(r => r.vids.some(v => v.adv > 1));
+    ok = ok || playing;
+    console.log('   ' + (playing ? 'PLAYING' : 'NO-PLAY') + ' ' + servers[i] + ' ' + JSON.stringify(results));
+    if (!playing) {
+      const texts = [];
+      for (const f of page.frames().slice(1)) texts.push(await f.evaluate(() => (document.body && document.body.innerText || '').replace(/\s+/g, ' ').slice(0, 100)).catch(() => '?'));
+      console.log('      frames text: ' + JSON.stringify(texts) + ' | console: ' + logs.slice(-2).join(' | '));
+    }
   }
+  console.log('   => ' + (ok ? 'OK' : 'FAIL'));
   await page.close();
-  return playing;
+  return ok;
 }
 
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', args: ['--autoplay-policy=no-user-gesture-required'] });
-  let anyCaseFailed = false;
-  for (const [title, ep] of CASES) {
-    const t = Date.now();
-    const r = await fetch(API + '/api/episode/x/' + ep + '?title=' + encodeURIComponent(title)).then(r => r.json());
-    const embeds = (r.data && r.data.embeds) || [];
-    console.log('\n' + title + ' ep ' + ep + ': ' + embeds.length + ' players in ' + (Date.now() - t) + 'ms');
-    console.log('   trace ' + JSON.stringify(r.trace));
-    let ok = false;
-    for (const e of embeds.slice(0, 4)) {
-      let played = await probeEmbed(browser, e, '');
-      if (!played) played = await probeEmbed(browser, e, 'no-referrer');
-      ok = played || ok;
-    }
-    console.log('   => ' + (ok ? 'OK: at least one player plays' : 'FAIL: nothing played'));
-    if (!ok) anyCaseFailed = true;
-  }
+  let failed = 0;
+  for (const [title, ep] of CASES) if (!(await runCase(browser, title, ep))) failed++;
   await browser.close();
-  process.exitCode = anyCaseFailed ? 1 : 0;
+  console.log('\n' + (CASES.length - failed) + '/' + CASES.length + ' cases playing');
+  process.exitCode = failed ? 1 : 0;
 })();

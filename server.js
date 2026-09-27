@@ -26,7 +26,7 @@ var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (
 
 // ── Utility Functions ───────────────────────────────────────────────────────
 
-function fetchUrl(targetUrl, maxRedirects) {
+function fetchUrl(targetUrl, maxRedirects, timeoutMs, extraHeaders) {
   if (maxRedirects === undefined) maxRedirects = 5;
   return new Promise(function(resolve, reject) {
     if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
@@ -39,6 +39,7 @@ function fetchUrl(targetUrl, maxRedirects) {
         'Accept-Encoding': 'identity'
       }
     };
+    if (extraHeaders) Object.keys(extraHeaders).forEach(function(k) { options.headers[k] = extraHeaders[k]; });
 
     var req = mod.get(targetUrl, options, function(res) {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
@@ -47,7 +48,7 @@ function fetchUrl(targetUrl, maxRedirects) {
           var u = new URL(targetUrl);
           loc = u.protocol + '//' + u.host + loc;
         }
-        return fetchUrl(loc, maxRedirects - 1).then(resolve).catch(reject);
+        return fetchUrl(loc, maxRedirects - 1, timeoutMs, extraHeaders).then(resolve).catch(reject);
       }
       var chunks = [];
       res.on('data', function(c) { chunks.push(c); });
@@ -56,7 +57,7 @@ function fetchUrl(targetUrl, maxRedirects) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(15000, function() { req.destroy(); reject(new Error('timeout')); });
+    req.setTimeout(timeoutMs || 15000, function() { req.destroy(); reject(new Error('timeout')); });
   });
 }
 
@@ -220,23 +221,24 @@ function postForm(targetUrl, body, referer) {
   });
 }
 
-// Pick the /animes/<slug>/ link whose slug best matches the query words.
-function pickAnimeUrl(html, base, query, wantDub) {
+// Best dub and best sub /animes/<slug>/ links whose slug matches the query words.
+function pickAnimeVersions(html, base, query) {
   var host = new URL(base).hostname.replace(/^www\./, '');
   var qWords = normalizeForMatch(query).split(' ').filter(Boolean);
   var re = /href=["'](https?:\/\/([^\/"']+)\/animes\/([a-z0-9-]+)\/?)["']/gi;
-  var best = null, m;
+  var best = { dub: null, sub: null }, m;
   while ((m = re.exec(html)) !== null) {
     if (m[2].replace(/^www\./, '') !== host) continue;
     var slugWords = m[3].split('-');
     var hits = qWords.filter(function(w) { return slugWords.indexOf(w) !== -1; }).length;
     if (!qWords.length || hits < Math.ceil(qWords.length * 0.75)) continue;
     var extra = slugWords.filter(function(w) { return qWords.indexOf(w) === -1 && SLUG_NOISE.indexOf(w) === -1; }).length;
-    var isDub = slugWords.indexOf('dublado') !== -1;
-    var score = hits * 10 - extra * 2 + (isDub === wantDub ? 3 : 0);
-    if (!best || score > best.score) best = { url: m[1], score: score, dub: isDub };
+    var dub = slugWords.indexOf('dublado') !== -1;
+    var score = hits * 10 - extra * 2;
+    var key = dub ? 'dub' : 'sub';
+    if (!best[key] || score > best[key].score) best[key] = { url: m[1], score: score, dub: dub };
   }
-  return best;
+  return [best.sub, best.dub].filter(Boolean);
 }
 
 // Episode number -> URL. Sidebars list other shows' episodes too, so keep only the
@@ -257,31 +259,35 @@ function parseEpisodeList(html) {
   return best;
 }
 
-function getEpisodeList(site, title, wantDub, trace) {
-  var cacheKey = site.name + '|' + normalizeForMatch(title) + '|' + wantDub;
+// Dub and sub versions of a show on one site, each with its episode list.
+function getAnimeVersions(site, title, trace) {
+  var cacheKey = site.name + '|' + normalizeForMatch(title);
   var cached = episodeListCache[cacheKey];
   if (cached && Date.now() - cached.at < EPISODE_LIST_TTL) {
-    trace.push('cached ' + Object.keys(cached.episodes).length + ' episodes');
-    return Promise.resolve(cached);
+    trace.push('cached ' + cached.versions.length + ' versions');
+    return Promise.resolve(cached.versions);
   }
 
   var queries = titleQueries(title);
   var i = 0;
   function tryQuery() {
-    if (i >= queries.length) return Promise.resolve(null);
+    if (i >= queries.length) return Promise.resolve([]);
     var q = queries[i++];
     return fetchText(site.base + '/?s=' + encodeURIComponent(q)).then(function(html) {
-      var anime = pickAnimeUrl(html, site.base, q, wantDub);
-      trace.push('search "' + q + '" -> ' + (anime ? anime.url : 'no match'));
-      if (!anime) return tryQuery();
-      return fetchText(anime.url).then(function(animeHtml) {
-        var episodes = parseEpisodeList(animeHtml);
-        var count = Object.keys(episodes).length;
-        trace.push(count + ' episodes listed');
-        if (!count) return tryQuery();
-        var entry = { at: Date.now(), episodes: episodes, dub: anime.dub };
-        episodeListCache[cacheKey] = entry;
-        return entry;
+      var picks = pickAnimeVersions(html, site.base, q);
+      trace.push('search "' + q + '" -> ' + (picks.map(function(p) { return p.url; }).join(' , ') || 'no match'));
+      if (!picks.length) return tryQuery();
+      return Promise.all(picks.map(function(p) {
+        return fetchText(p.url).then(function(animeHtml) {
+          var episodes = parseEpisodeList(animeHtml);
+          trace.push(p.url.split('/animes/')[1] + ': ' + Object.keys(episodes).length + ' episodes');
+          return { url: p.url, dub: p.dub, episodes: episodes };
+        }).catch(function(err) { trace.push('anime page error: ' + err.message); return null; });
+      })).then(function(versions) {
+        versions = versions.filter(function(v) { return v && Object.keys(v.episodes).length; });
+        if (!versions.length) return tryQuery();
+        episodeListCache[cacheKey] = { at: Date.now(), versions: versions };
+        return versions;
       });
     });
   }
@@ -300,15 +306,6 @@ function unwrapEmbed(raw) {
   return url;
 }
 
-function playerInfo(url) {
-  var host = new URL(url).hostname.replace(/^www\./, '');
-  if (host.indexOf('blogger.com') !== -1) return { name: 'Blogger', rank: 0 };
-  if (host.indexOf('sk-api') === 0) return { name: 'Player HD', rank: 1 };
-  if (host.indexOf('filemoon') !== -1) return { name: 'Filemoon', rank: 2 };
-  if (host.indexOf('vgembed') !== -1 || host.indexOf('vidguard') !== -1) return { name: 'VidGuard', rank: 3 };
-  return { name: host.split('.')[0], rank: 4 };
-}
-
 function getEpisodeEmbeds(site, episodeUrl, trace) {
   return fetchText(episodeUrl).then(function(html) {
     var post = (html.match(/data-post=["'](\d+)["']/) || [])[1];
@@ -317,7 +314,6 @@ function getEpisodeEmbeds(site, episodeUrl, trace) {
     while ((m = re.exec(html)) !== null) {
       if (m[1] !== 'trailer' && numes.indexOf(m[1]) === -1) numes.push(m[1]);
     }
-    trace.push('episode post=' + post + ' options=' + numes.join(','));
     if (!post) return [];
     return Promise.all(numes.map(function(nume) {
       var body = 'action=doo_player_ajax&post=' + post + '&nume=' + nume + '&type=' + type;
@@ -331,25 +327,73 @@ function getEpisodeEmbeds(site, episodeUrl, trace) {
   });
 }
 
+var DEAD_EMBED_TEXT = /no longer available|has been deleted|file (?:was )?(?:not found|deleted|removed)|domain may be for sale|video (?:is )?unavailable/i;
+var QUALITY_ORDER = [/1080|FHD|FULL/i, /720|HD/i, /480|SD/i, /LD|360/i];
+
+function qualityRank(q) {
+  for (var i = 0; i < QUALITY_ORDER.length; i++) if (QUALITY_ORDER[i].test(q || '')) return i;
+  return QUALITY_ORDER.length;
+}
+
+// sk-api only answers with the source site as Referer; its JSON lists HLS streams
+// that play from any IP, so the server resolves it and the app plays it via /api/hls-proxy.
+function resolveSkApi(url, referer) {
+  var u = new URL(url);
+  u.searchParams.set('mode', 'to-salvando-seu-ip');
+  return fetchUrl(u.toString(), 3, 8000, { Referer: referer }).then(function(r) {
+    var data = JSON.parse(r.body.toString());
+    if (data.status !== 'success' || !data.midias || !data.midias.length) return null;
+    var best = data.midias.slice().sort(function(a, b) { return qualityRank(a.qualidade) - qualityRank(b.qualidade); })[0];
+    return best && best.url ? { kind: 'hls', url: best.url, quality: best.qualidade } : null;
+  }).catch(function() { return null; });
+}
+
+function embedAlive(url) {
+  return fetchUrl(url, 3, 6000).then(function(r) {
+    return r.status < 400 && !DEAD_EMBED_TEXT.test(r.body.toString().slice(0, 20000));
+  }).catch(function() { return false; });
+}
+
+function resolvePlayer(url, site) {
+  var host = new URL(url).hostname.replace(/^www\./, '');
+  if (host.indexOf('sk-api') === 0) {
+    return resolveSkApi(url, site.base + '/').then(function(s) {
+      return s ? { kind: 'hls', url: s.url, name: 'Player HD' + (s.quality ? ' ' + s.quality : ''), rank: 0 } : null;
+    });
+  }
+  if (host.indexOf('blogger.com') !== -1) return Promise.resolve({ kind: 'iframe', url: url, name: 'Blogger', rank: 1 });
+  var name = host.indexOf('filemoon') !== -1 ? 'Filemoon' : host.split('.')[0];
+  var rank = host.indexOf('filemoon') !== -1 ? 2 : 3;
+  return embedAlive(url).then(function(ok) { return ok ? { kind: 'iframe', url: url, name: name, rank: rank } : null; });
+}
+
 function findEpisodeEmbeds(title, episode) {
   var wantDub = /dublado/i.test(title);
   var epNum = parseInt(episode, 10);
   var traces = {};
   return Promise.all(DOOPLAY_SITES.map(function(site) {
     var trace = traces[site.name] = [];
-    return getEpisodeList(site, title, wantDub, trace).then(function(list) {
-      var epUrl = list && list.episodes[epNum];
-      if (!epUrl) { trace.push('episode ' + epNum + ' not found'); return []; }
-      return getEpisodeEmbeds(site, epUrl, trace).then(function(urls) {
-        return urls.map(function(url) {
-          var info = playerInfo(url);
-          return {
-            url: url, provider: site.name,
-            label: (list.dub ? 'Dublado' : 'Legendado') + ' · ' + info.name,
-            rank: (list.dub === wantDub ? 0 : 10) + info.rank
-          };
+    return getAnimeVersions(site, title, trace).then(function(versions) {
+      return Promise.all(versions.map(function(v) {
+        var epUrl = v.episodes[epNum];
+        var tag = v.dub ? 'dub' : 'sub';
+        if (!epUrl) { trace.push(tag + ': episode ' + epNum + ' not found'); return []; }
+        return getEpisodeEmbeds(site, epUrl, trace).then(function(urls) {
+          return Promise.all(urls.map(function(u) { return resolvePlayer(u, site); })).then(function(players) {
+            var alive = players.filter(Boolean);
+            trace.push(tag + ': ' + urls.length + ' options, ' + alive.length + ' usable');
+            return alive.map(function(p) {
+              return {
+                kind: p.kind, url: p.url, provider: site.name,
+                label: (v.dub ? 'Dublado' : 'Legendado') + ' · ' + p.name,
+                rank: (v.dub === wantDub ? 0 : 10) + p.rank
+              };
+            });
+          });
         });
-      });
+      }));
+    }).then(function(lists) {
+      return [].concat.apply([], lists);
     }).catch(function(err) { trace.push('error: ' + err.message); return []; });
   })).then(function(lists) {
     var embeds = [].concat.apply([], lists).sort(function(a, b) { return a.rank - b.rank; });
@@ -552,7 +596,7 @@ var server = http.createServer(function(req, res) {
         sendJSON(res, 404, { error: true, message: 'Episódio não encontrado', trace: result.trace });
         return;
       }
-      var embeds = result.embeds.map(function(e) { return { url: e.url, label: e.label, provider: e.provider }; });
+      var embeds = result.embeds.map(function(e) { return { kind: e.kind, url: e.url, label: e.label, provider: e.provider }; });
       sendJSON(res, 200, { error: false, data: { type: 'embed', provider: embeds[0].provider, embed_url: embeds[0].url, embeds: embeds }, trace: result.trace });
     }).catch(function(err) {
       console.error('[Episode] Error:', err.message);
