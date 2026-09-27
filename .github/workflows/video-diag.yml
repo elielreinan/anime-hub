@@ -30,10 +30,10 @@ jobs:
         if: ${{ inputs.app_url != '' && !startsWith(inputs.app_url, 'http://localhost') }}
         run: |
           for i in $(seq 1 60); do
-            curl -s -m 20 https://anime-hub-zz7f.onrender.com/api/party | grep -q "Use POST" && echo "API ready" && exit 0
+            curl -s -m 20 https://anime-hub-zz7f.onrender.com/api/status | grep -q "$GITHUB_SHA" && echo "API running $GITHUB_SHA" && exit 0
             sleep 10
           done
-          echo "API did not come up with the current version" && exit 1
+          echo "Render is not running $GITHUB_SHA yet" && exit 1
       - name: Playback end-to-end (real Chrome)
         env:
           APP_URL: ${{ inputs.app_url }}

@@ -832,7 +832,7 @@ var server = http.createServer(function(req, res) {
   // Route: /api/status - server status
   if (pathname === '/api/status') {
     sendJSON(res, 200, {
-      server: 'running', timestamp: new Date().toISOString(),
+      server: 'running', timestamp: new Date().toISOString(), commit: process.env.RENDER_GIT_COMMIT || '',
       video_sources: DOOPLAY_SITES.map(function(s) { return s.name; })
     });
     return;
