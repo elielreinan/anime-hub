@@ -609,53 +609,109 @@ function normalizeForMatch(s) {
     .trim();
 }
 
+// Resolve href (absolute or relative) to absolute URL, only if same host as origin (ignoring www.)
+function resolveSameOriginUrl(href, origin) {
+  if (!href) return null;
+  try {
+    var abs;
+    if (href.indexOf('http') === 0) {
+      abs = href;
+    } else if (href.indexOf('//') === 0) {
+      abs = new URL(origin).protocol + href;
+    } else if (href.indexOf('/') === 0) {
+      abs = origin + href;
+    } else {
+      return null; // relative without leading slash - too ambiguous, skip
+    }
+    var h = new URL(abs);
+    var o = new URL(origin);
+    var hh = h.hostname.replace(/^www\./, '');
+    var oh = o.hostname.replace(/^www\./, '');
+    if (hh !== oh) return null;
+    return abs;
+  } catch (e) {
+    return null;
+  }
+}
+
+// Extract every <a> tag: href + combined visible text (inner text + title attr + img alt)
+function extractAllLinks(html, origin) {
+  var linkRegex = /<a\b([^>]*)>([\s\S]*?)<\/a>/gi;
+  var match;
+  var links = [];
+  while ((match = linkRegex.exec(html)) !== null) {
+    var attrs = match[1];
+    var inner = match[2];
+    var hrefMatch = attrs.match(/\bhref=["']([^"']+)["']/i);
+    if (!hrefMatch) continue;
+    var abs = resolveSameOriginUrl(hrefMatch[1], origin);
+    if (!abs) continue;
+
+    var titleAttrMatch = attrs.match(/\btitle=["']([^"']+)["']/i);
+    var altAttrMatch = inner.match(/\balt=["']([^"']+)["']/i);
+    var innerText = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    var combinedText = [innerText, titleAttrMatch && titleAttrMatch[1], altAttrMatch && altAttrMatch[1]]
+      .filter(Boolean).join(' ');
+
+    links.push({ href: abs, text: combinedText });
+  }
+  return links;
+}
+
 // Find candidate anime page links on a search results page, ranked by title word overlap
 function extractSearchResultLinks(html, origin, title) {
-  var linkRegex = /<a[^>]+href=["'](https?:\/\/[^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  var match;
+  var links = extractAllLinks(html, origin);
   var titleWords = normalizeForMatch(title).split(' ').filter(function(w) { return w.length > 1; });
   var seen = {};
   var scored = [];
 
-  while ((match = linkRegex.exec(html)) !== null) {
-    var href = match[1];
-    if (href.indexOf(origin) !== 0) continue;
-    if (/\/(page|category|tag|author|feed|wp-|attachment|\?s=)/.test(href)) continue;
-    if (seen[href]) continue;
+  links.forEach(function(link) {
+    var href = link.href;
+    if (/\/(page|category|tag|author|feed|wp-|attachment)\//.test(href) || href.indexOf('?s=') !== -1) return;
+    if (seen[href]) return;
 
-    var text = match[2].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    var textNorm = normalizeForMatch(text || href);
-    if (!textNorm) continue;
+    var textNorm = normalizeForMatch(link.text);
+    if (!textNorm) return;
 
     var score = 0;
     titleWords.forEach(function(w) { if (textNorm.indexOf(w) !== -1) score++; });
-    if (score === 0) continue;
+    if (score === 0) return;
 
     seen[href] = true;
-    scored.push({ href: href, text: text, score: score });
-  }
+    scored.push({ href: href, text: link.text, score: score });
+  });
 
   scored.sort(function(a, b) { return b.score - a.score; });
-  return scored.map(function(s) { return s.href; });
+  return scored;
 }
 
-function searchSiteAnimePage(baseUrl, title, providerName) {
+function searchSiteAnimePage(baseUrl, title, providerName, trace) {
   var searchUrl = baseUrl + '/?s=' + encodeURIComponent(title);
+  if (trace) trace.searchUrl = searchUrl;
   console.log('[' + providerName + '] Search:', searchUrl);
   return fetchUrl(searchUrl).then(function(result) {
+    if (trace) trace.searchStatus = result.status;
     if (result.status >= 400) return null;
     var origin = new URL(baseUrl).origin;
-    var candidates = extractSearchResultLinks(result.body.toString(), origin, title);
-    return candidates.length > 0 ? candidates[0] : null;
+    var html = result.body.toString();
+    var candidates = extractSearchResultLinks(html, origin, title);
+    if (trace) {
+      trace.candidates = candidates.slice(0, 5).map(function(c) { return { href: c.href, text: c.text.substring(0, 60), score: c.score }; });
+      trace.htmlLength = html.length;
+      trace.linkCount = extractAllLinks(html, origin).length;
+    }
+    return candidates.length > 0 ? candidates[0].href : null;
   }).catch(function(err) {
+    if (trace) trace.searchError = err.message;
     console.log('[' + providerName + '] Search error:', err.message);
     return null;
   });
 }
 
 // Find the episode link on an anime's page matching the given episode number
-function findEpisodeLink(animePageUrl, episode) {
+function findEpisodeLink(animePageUrl, episode, trace) {
   return fetchUrl(animePageUrl).then(function(result) {
+    if (trace) trace.animePageStatus = result.status;
     if (result.status >= 400) return null;
     var html = result.body.toString();
     var origin;
@@ -665,34 +721,42 @@ function findEpisodeLink(animePageUrl, episode) {
       new RegExp('episodio[-_]?0*' + episode + '(?:[^0-9]|$)', 'i'),
       new RegExp('epis[oó]dio\\s*0*' + episode + '(?:[^0-9]|$)', 'i'),
       new RegExp('ep[-_]?0*' + episode + '(?:[^0-9]|$)', 'i'),
-      new RegExp('cap[ií]tulo\\s*0*' + episode + '(?:[^0-9]|$)', 'i')
+      new RegExp('cap[ií]tulo\\s*0*' + episode + '(?:[^0-9]|$)', 'i'),
+      new RegExp('(?:^|[^0-9])0*' + episode + '(?:[^0-9]|$)')
     ];
 
-    var linkRegex = /<a[^>]+href=["'](https?:\/\/[^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-    var match;
-    while ((match = linkRegex.exec(html)) !== null) {
-      var href = match[1];
-      if (origin && href.indexOf(origin) !== 0) continue;
-      var text = match[2].replace(/<[^>]+>/g, ' ').trim();
-      var hay = href + ' ' + text;
-      for (var i = 0; i < epPatterns.length; i++) {
-        if (epPatterns[i].test(hay)) return href;
+    var links = extractAllLinks(html, origin);
+    if (trace) trace.animePageLinkCount = links.length;
+
+    for (var i = 0; i < links.length; i++) {
+      var hay = links[i].href + ' ' + links[i].text;
+      for (var j = 0; j < epPatterns.length - 1; j++) {
+        if (epPatterns[j].test(hay)) return links[i].href;
       }
     }
+    // Last resort: loose number match only on visible text (risk of false positives, so lowest priority)
+    for (var k = 0; k < links.length; k++) {
+      if (epPatterns[epPatterns.length - 1].test(links[k].text)) return links[k].href;
+    }
     return null;
-  }).catch(function() { return null; });
+  }).catch(function(err) {
+    if (trace) trace.animePageError = err.message;
+    return null;
+  });
 }
 
 // Full pipeline: search for anime -> find episode -> extract video
-function searchAndScrapeSite(baseUrl, title, episode, providerName) {
-  return searchSiteAnimePage(baseUrl, title, providerName).then(function(animeUrl) {
+function searchAndScrapeSite(baseUrl, title, episode, providerName, trace) {
+  return searchSiteAnimePage(baseUrl, title, providerName, trace).then(function(animeUrl) {
+    if (trace) trace.animeUrl = animeUrl;
     if (!animeUrl) {
       console.log('[' + providerName + '] search: no anime match for "' + title + '"');
       return null;
     }
     console.log('[' + providerName + '] matched anime page:', animeUrl);
 
-    return findEpisodeLink(animeUrl, episode).then(function(epUrl) {
+    return findEpisodeLink(animeUrl, episode, trace).then(function(epUrl) {
+      if (trace) trace.episodeUrl = epUrl;
       if (!epUrl) {
         console.log('[' + providerName + '] no episode link found for ep', episode);
         return null;
@@ -700,8 +764,10 @@ function searchAndScrapeSite(baseUrl, title, episode, providerName) {
       console.log('[' + providerName + '] episode url:', epUrl);
 
       return fetchUrl(epUrl).then(function(result) {
+        if (trace) trace.episodePageStatus = result.status;
         if (result.status >= 400) return null;
         var sources = extractVideoFromPage(result.body.toString());
+        if (trace) trace.sourcesFound = { videos: sources.videos.length, bloggerEmbeds: sources.bloggerEmbeds.length, embeds: sources.embeds.length };
         var origin = '';
         try { origin = new URL(epUrl).origin + '/'; } catch (e) {}
 
@@ -722,9 +788,15 @@ function searchAndScrapeSite(baseUrl, title, episode, providerName) {
           });
         }
         return null;
-      }).catch(function() { return null; });
+      }).catch(function(err) {
+        if (trace) trace.episodePageError = err.message;
+        return null;
+      });
     });
-  }).catch(function() { return null; });
+  }).catch(function(err) {
+    if (trace) trace.error = err.message;
+    return null;
+  });
 }
 
 function searchBrazilianSitesViaSearch(title, episode) {
@@ -989,10 +1061,11 @@ function handleDebugVideo(title, episode, res) {
   // Test search-based scraping (real site search, for sites with unknown URL patterns)
   Object.keys(SEARCH_BASED_SITES).forEach(function(name) {
     var key = name + '_search';
+    var trace = {};
     promises.push(
-      searchAndScrapeSite(SEARCH_BASED_SITES[name], title, episode, key)
-        .then(function(r) { results.providers[key] = r || { status: 'no_results' }; })
-        .catch(function(e) { results.providers[key] = { status: 'error', error: e.message }; })
+      searchAndScrapeSite(SEARCH_BASED_SITES[name], title, episode, key, trace)
+        .then(function(r) { results.providers[key] = r ? Object.assign({}, r, { trace: trace }) : { status: 'no_results', trace: trace }; })
+        .catch(function(e) { results.providers[key] = { status: 'error', error: e.message, trace: trace }; })
     );
   });
 
