@@ -1,0 +1,29 @@
+name: video-diag
+
+on:
+  push:
+    branches: [claude/bold-wright-noyldb]
+  workflow_dispatch:
+
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Source diagnostics
+        run: node scripts/diag.js
+      - name: Server end-to-end
+        run: |
+          PORT=3000 node server.js > server.log 2>&1 &
+          sleep 5
+          echo "--- death note 1"
+          curl -s -m 120 "http://localhost:3000/api/episode/death-note/1?title=Death%20Note"; echo
+          echo "--- naruto shippuden 451"
+          curl -s -m 120 "http://localhost:3000/api/episode/naruto-shippuden/451?title=Naruto%20Shippuden%20(Naruto%20Shippuuden)"; echo
+          echo "--- server log"
+          tail -80 server.log
