@@ -2,7 +2,8 @@
 // open the player via the app's own openPlayer(), then try each server button
 // and report whether a video actually advances.
 // Usage: node scripts/e2e-play.js [appUrl]   (default http://localhost:3000/)
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
+const ENGINE = process.env.BROWSER || 'chrome';
 
 const APP = process.argv[2] || 'http://localhost:3000/';
 const CASES = [
@@ -23,11 +24,23 @@ async function videoProgress(frame) {
   return Promise.race([run, new Promise(r => setTimeout(() => r([]), 12000))]);
 }
 
+// Reload once the service worker is active so it controls the page, as it does for
+// returning users (a first visit is not controlled and hides worker bugs).
+async function openApp(page, url) {
+  await page.goto(url, { waitUntil: 'load' });
+  const controlled = await page.evaluate(() => Promise.race([
+    navigator.serviceWorker.ready.then(() => true),
+    new Promise(r => setTimeout(() => r(false), 10000))
+  ])).catch(() => false);
+  if (controlled) await page.reload({ waitUntil: 'load' });
+  return page.evaluate(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller)).catch(() => false);
+}
+
 async function runCase(browser, title, ep) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   const logs = [];
   page.on('console', m => { if (m.type() === 'error') logs.push(m.text().slice(0, 140)); });
-  await page.goto(APP, { waitUntil: 'load' });
+  const sw = await openApp(page, APP);
   const t0 = Date.now();
   await page.evaluate(([title, ep]) => {
     currentAnime = { id: 1, category_name: title };
@@ -35,7 +48,7 @@ async function runCase(browser, title, ep) {
   }, [title, ep]);
   await page.waitForFunction(() => document.querySelectorAll('.server-btn').length > 0 || /indispon|não disponível|Erro/i.test(document.getElementById('player-status').textContent), null, { timeout: 90000 }).catch(() => {});
   const servers = await page.$$eval('.server-btn', bs => bs.map(b => b.textContent));
-  console.log('\n' + title + ' ep ' + ep + ': ' + servers.length + ' servers in ' + (Date.now() - t0) + 'ms ' + JSON.stringify(servers));
+  console.log('\n' + title + ' ep ' + ep + ' [' + ENGINE + (sw ? ', sw' : '') + ']: ' + servers.length + ' servers in ' + (Date.now() - t0) + 'ms ' + JSON.stringify(servers));
   if (!servers.length) {
     console.log('   status: ' + (await page.textContent('#player-status')) + ' | console: ' + logs.slice(0, 3).join(' | '));
     await page.close();
@@ -75,7 +88,7 @@ async function runCase(browser, title, ep) {
 // A opens an episode and B must follow; then a seek on A must move B too.
 async function partyCase(browser, title, ep) {
   const a = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-  await a.goto(APP, { waitUntil: 'load' });
+  await openApp(a, APP);
   await a.evaluate(() => createParty());
   await a.waitForFunction(() => party && document.querySelector('.party-code'), null, { timeout: 60000 });
   const code = await a.evaluate(() => party.code);
@@ -97,7 +110,9 @@ async function partyCase(browser, title, ep) {
 }
 
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', args: ['--autoplay-policy=no-user-gesture-required'] });
+  const browser = ENGINE === 'webkit'
+    ? await webkit.launch()
+    : await chromium.launch({ channel: 'chrome', args: ['--autoplay-policy=no-user-gesture-required'] });
   let failed = 0;
   for (const [title, ep] of CASES) if (!(await runCase(browser, title, ep))) failed++;
   if (!(await partyCase(browser, 'Naruto Shippuden (Naruto Shippuuden)', 451))) failed++;

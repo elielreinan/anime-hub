@@ -12,7 +12,7 @@ on:
 jobs:
   playback:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -35,6 +35,9 @@ jobs:
         env:
           APP_URL: ${{ inputs.app_url }}
         run: node scripts/e2e-play.js "${APP_URL:-http://localhost:3000/}"
+      - name: Playback end-to-end (WebKit, Safari engine)
+        if: ${{ !cancelled() && (inputs.app_url == '' || startsWith(inputs.app_url, 'http://localhost')) }}
+        run: npx playwright install --with-deps webkit && BROWSER=webkit node scripts/e2e-play.js
       - name: Server log
         if: always()
         run: grep -v "ATV-Proxy" server.log | tail -30
