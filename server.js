@@ -3,7 +3,6 @@ var http = require('http');
 var https = require('https');
 var fs = require('fs');
 var path = require('path');
-var crypto = require('crypto');
 
 var PORT = process.env.PORT || 3000;
 var STATIC_DIR = path.join(__dirname, 'docs');
@@ -17,7 +16,6 @@ var MIME = {
 };
 
 var ATV_BASE = 'https://atv2.net/meuanimetv-74.php?';
-var ATV_DECRYPT_KEY = 'pR7lM7iA7lU2oV3cD8zO4aP0rL7dH5cH';
 
 var BLOCKED_GENRES = [
   'hentai', 'ecchi', 'erotica', 'yaoi', 'yuri', 'nudity',
@@ -149,99 +147,6 @@ function filterATVResponse(body) {
     // Not valid JSON, return as-is
     return body.toString();
   }
-}
-
-// Decrypt AnimeTV video URL
-function decryptATVVideo(encryptedField) {
-  try {
-    var keyBytes = Buffer.from(ATV_DECRYPT_KEY, 'utf8');
-    var fullStr = encryptedField;
-
-    // Extract IV: reverse the last 64 chars, take first 16 bytes
-    var last64 = fullStr.slice(-64);
-    var reversed = last64.split('').reverse().join('');
-    var ivBytes = Buffer.from(reversed.substring(0, 16), 'utf8');
-
-    // Strip first 36 chars (JWT header) and last 64 chars (signature)
-    var middle = fullStr.substring(36, fullStr.length - 64);
-
-    // Middle part is Base64-encoded ciphertext
-    var ciphertext = Buffer.from(middle, 'base64');
-
-    var decipher = crypto.createDecipheriv('aes-256-cbc', keyBytes, ivBytes);
-    var decrypted = decipher.update(ciphertext);
-    decrypted = Buffer.concat([decrypted, decipher.final()]);
-
-    return decrypted.toString('utf8').trim();
-  } catch (err) {
-    console.error('[ATV-Decrypt] Error:', err.message);
-    return null;
-  }
-}
-
-// Handle /api/atv-video/:videoId - get AnimeTV video URL
-function handleATVVideoDecrypt(videoId, res) {
-  var url = ATV_BASE + 'episodios=' + videoId;
-  console.log('[ATV-Video] Fetching video data for ID:', videoId);
-
-  fetchUrl(url).then(function(result) {
-    try {
-      var raw = JSON.parse(result.body.toString());
-      var data = Array.isArray(raw) ? raw[0] : raw;
-
-      if (!data || typeof data !== 'object') {
-        sendJSON(res, 404, { error: true, message: 'Empty response from ATV API' });
-        return;
-      }
-
-      console.log('[ATV-Video] Raw data:', JSON.stringify(data).substring(0, 500));
-
-      // New API format: plain URL fields (locationhd > locationsd > location)
-      // Check with explicit length check since empty strings are falsy
-      var videoUrl = null;
-      if (data.locationhd && data.locationhd.length > 5) videoUrl = data.locationhd;
-      else if (data.locationsd && data.locationsd.length > 5) videoUrl = data.locationsd;
-      else if (data.location && data.location.length > 5) videoUrl = data.location;
-
-      if (videoUrl) {
-        console.log('[ATV-Video] Found direct URL:', videoUrl.substring(0, 80) + '...');
-        sendJSON(res, 200, { error: false, video_url: videoUrl, provider: 'animetv' });
-        return;
-      }
-
-      // Legacy: try encrypted field or any long base64-like field
-      var encField = null;
-      var keys = Object.keys(data);
-      for (var i = 0; i < keys.length; i++) {
-        var val = data[keys[i]];
-        if (typeof val === 'string' && val.length > 100) {
-          encField = val;
-          console.log('[ATV-Video] Trying to decrypt field:', keys[i], '(length:', val.length, ')');
-          var decrypted = decryptATVVideo(val);
-          if (decrypted) {
-            console.log('[ATV-Video] Decrypted URL:', decrypted.substring(0, 80) + '...');
-            sendJSON(res, 200, { error: false, video_url: decrypted, provider: 'animetv' });
-            return;
-          }
-        }
-      }
-
-      // Return debug info so we can see what the API gives us
-      var fieldValues = {};
-      keys.forEach(function(k) {
-        var v = data[k];
-        fieldValues[k] = typeof v === 'string' ? (v.length > 50 ? v.substring(0, 50) + '...' : v) : v;
-      });
-      console.log('[ATV-Video] No video URL found. Field values:', JSON.stringify(fieldValues));
-      sendJSON(res, 404, { error: true, message: 'No video URL in response', debug: fieldValues });
-    } catch (err) {
-      console.error('[ATV-Video] Parse error:', err.message);
-      sendJSON(res, 500, { error: true, message: 'Failed to parse video response' });
-    }
-  }).catch(function(err) {
-    console.error('[ATV-Video] Fetch error:', err.message);
-    sendJSON(res, 502, { error: true, message: err.message });
-  });
 }
 
 // Handle /api/atv/* - proxy for AnimeTV API with content filtering
@@ -1185,8 +1090,8 @@ var server = http.createServer(function(req, res) {
     var status = {
       server: 'running', version: '2.0', timestamp: new Date().toISOString(),
       consumet: { loaded: !!consumetProviders, attempted: consumetLoadAttempted, providers: consumetProviders ? consumetProviders.map(function(p) { return p.name; }) : [] },
-      video_providers: ['animetv', 'consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonline', 'superanimes', 'animesonlinecc'],
-      endpoints: ['/api/status', '/api/test-sites', '/api/debug-video/{title}/{ep}', '/api/episode/{slug}/{ep}?title=', '/api/atv-video/{id}', '/api/atv/*']
+      video_providers: ['consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonline', 'superanimes', 'animesonlinecc'],
+      endpoints: ['/api/status', '/api/test-sites', '/api/debug-video/{title}/{ep}', '/api/episode/{slug}/{ep}?title=', '/api/atv/*']
     };
     sendJSON(res, 200, status);
     return;
@@ -1211,17 +1116,6 @@ var server = http.createServer(function(req, res) {
   // Route: /api/hls-proxy?url= - HLS manifest proxy
   if (pathname === '/api/hls-proxy') {
     handleHLSProxy(urlObj, res);
-    return;
-  }
-
-  // Route: /api/atv-video/:videoId - AnimeTV video decryption
-  if (pathname.startsWith('/api/atv-video/')) {
-    var videoId = pathname.replace('/api/atv-video/', '');
-    if (!videoId) {
-      sendJSON(res, 400, { error: true, message: 'Missing videoId' });
-      return;
-    }
-    handleATVVideoDecrypt(videoId, res);
     return;
   }
 
@@ -1256,38 +1150,7 @@ var server = http.createServer(function(req, res) {
 
     console.log('[Episode] Searching title="' + title + '" slug="' + slug + '" ep=' + episode);
 
-    // Priority 1: Try AnimeTV decrypted video (if we have an ATV video ID)
-    var atvId = urlObj.searchParams.get('atv_id');
-    var atvPromise;
-
-    if (atvId) {
-      console.log('[Episode] Trying AnimeTV first with ID:', atvId);
-      atvPromise = fetchUrl(ATV_BASE + 'episodios=' + atvId).then(function(result) {
-        try {
-          var raw = JSON.parse(result.body.toString());
-          var data = Array.isArray(raw) ? raw[0] : raw;
-          var directUrl = data && ((data.locationhd && data.locationhd.length > 5 && data.locationhd) ||
-                                   (data.locationsd && data.locationsd.length > 5 && data.locationsd) ||
-                                   (data.location && data.location.length > 5 && data.location));
-          if (directUrl) {
-            return { provider: 'animetv', video_url: directUrl, type: 'direct' };
-          }
-        } catch (e) { /* fall through */ }
-        return null;
-      }).catch(function() { return null; });
-    } else {
-      atvPromise = Promise.resolve(null);
-    }
-
-    atvPromise.then(function(atvResult) {
-      if (atvResult) {
-        console.log('[Episode] ATV video found');
-        sendJSON(res, 200, { error: false, data: atvResult });
-        return;
-      }
-
-      // Priority 2: Consumet providers (AnimeKai, Hianime, etc.)
-      console.log('[Episode] ATV failed, trying Consumet providers...');
+    Promise.resolve().then(function() {
       return searchConsumetVideo(title, episode).then(function(consumetResult) {
         if (consumetResult) {
           console.log('[Episode] Consumet found video via', consumetResult.provider);
@@ -1311,7 +1174,7 @@ var server = http.createServer(function(req, res) {
               sendJSON(res, 200, { error: false, data: result });
             } else {
               sendJSON(res, 404, { error: true, message: 'Episodio nao encontrado em nenhum provedor',
-                providers_tried: ['animetv', 'consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonline', 'superanimes', 'animesonlinecc'] });
+                providers_tried: ['consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonline', 'superanimes', 'animesonlinecc'] });
             }
           });
         });
@@ -1373,7 +1236,6 @@ var server = http.createServer(function(req, res) {
 server.listen(PORT, function() {
   console.log('AnimeHub server running at http://localhost:' + PORT);
   console.log('API Routes:');
-  console.log('  GET /api/atv-video/:videoId          - AnimeTV video URL');
   console.log('  GET /api/atv/*                       - AnimeTV API proxy (filtered)');
   console.log('  GET /api/episode/:slug/:ep[?title=]  - multi-provider video search');
   console.log('  GET /api/hls-proxy?url=              - HLS manifest proxy');

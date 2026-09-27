@@ -950,31 +950,12 @@
       var title = currentAnime ? getTitle(currentAnime) : '';
       var slug = slugify(title);
 
-      fetchEpisodeVideo(slug, ep, videoId);
+      fetchEpisodeVideo(slug, ep);
     }
 
-    function fetchEpisodeVideo(slug, ep, videoId) {
-      if (videoId) {
-        fetch(getApiBase() + '/api/atv-video/' + videoId)
-          .then(function(r) { return r.json(); })
-          .then(function(data) {
-            if (!data.error && data.video_url) {
-              loadVideo(data.video_url, data.isM3U8 || false, data.referer || '');
-            } else {
-              fetchEpisodeFallback(slug, ep, videoId);
-            }
-          })
-          .catch(function() { fetchEpisodeFallback(slug, ep, videoId); });
-      } else {
-        fetchEpisodeFallback(slug, ep, null);
-      }
-    }
-
-    function fetchEpisodeFallback(slug, ep, atvVideoId) {
-      document.getElementById('player-status').textContent = 'Buscando fontes alternativas...';
+    function fetchEpisodeVideo(slug, ep) {
       var title = currentAnime ? getTitle(currentAnime) : slug.replace(/-/g, ' ');
       var apiUrl = getApiBase() + '/api/episode/' + encodeURIComponent(slug) + '/' + ep + '?title=' + encodeURIComponent(title);
-      if (atvVideoId) apiUrl += '&atv_id=' + atvVideoId;
       fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
         if (!data.error && data.data) {
           var d = data.data;
