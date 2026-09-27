@@ -6,6 +6,7 @@ var path = require('path');
 var crypto = require('crypto');
 var dns = require('dns');
 var net = require('net');
+var accounts = require('./accounts');
 
 var PORT = process.env.PORT || 3000;
 var STATIC_DIR = path.join(__dirname, 'docs');
@@ -722,7 +723,9 @@ var RATE_LIMITS = {
   proxy: { max: 1200, windowMs: 60000 },
   episode: { max: 60, windowMs: 60000 },
   partyCreate: { max: 10, windowMs: 60000 },
-  partyAction: { max: 120, windowMs: 60000 }
+  partyAction: { max: 120, windowMs: 60000 },
+  auth: { max: 10, windowMs: 60000 },
+  invite: { max: 30, windowMs: 60000 }
 };
 var rateHits = {};
 
@@ -767,12 +770,12 @@ function newPartyCode() {
   return code;
 }
 
-function readJsonBody(req) {
+function readJsonBody(req, maxBytes) {
   return new Promise(function(resolve, reject) {
-    var size = 0, chunks = [];
+    var size = 0, chunks = [], limit = maxBytes || 16384;
     req.on('data', function(c) {
       size += c.length;
-      if (size > 16384) { reject(new Error('body too large')); req.destroy(); } else chunks.push(c);
+      if (size > limit) { reject(new Error('body too large')); req.destroy(); } else chunks.push(c);
     });
     req.on('end', function() {
       try { resolve(JSON.parse(Buffer.concat(chunks).toString() || '{}')); } catch (e) { reject(e); }
@@ -937,15 +940,24 @@ var server = http.createServer(function(req, res) {
   // CORS headers for all responses
   var origin = req.headers.origin || '*';
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
   // Route: /api/status - server status
   if (pathname === '/api/status') {
     sendJSON(res, 200, {
-      server: 'running', timestamp: new Date().toISOString(), commit: process.env.RENDER_GIT_COMMIT || '',
+      server: 'running', timestamp: new Date().toISOString(), commit: process.env.RENDER_GIT_COMMIT || '', accounts: accounts.enabled(),
       video_sources: DOOPLAY_SITES.map(function(s) { return s.name; })
+    });
+    return;
+  }
+
+  // Route: /api/auth/*, /api/me/*, /api/users/:id - accounts
+  if (/^\/api\/(auth|me|users)(\/|$)/.test(pathname)) {
+    accounts.handle(req, res, pathname, {
+      sendJSON: sendJSON, readJsonBody: readJsonBody, allowRequest: allowRequest,
+      isParty: function(code) { return parties[code] || null; }
     });
     return;
   }
@@ -1040,6 +1052,7 @@ module.exports = {
   findEpisodeEmbeds: findEpisodeEmbeds,
   clearCaches: function() { playerCache = {}; episodeListCache = {}; }
 };
+if (require.main === module) accounts.init();
 if (require.main === module) server.listen(PORT, function() {
   console.log('AnimeHub server running at http://localhost:' + PORT);
   console.log('API Routes:');
@@ -1050,5 +1063,6 @@ if (require.main === module) server.listen(PORT, function() {
   console.log('  GET /api/embed-proxy?url=            - video stream proxy');
   console.log('  GET /api/status                      - server status');
   console.log('  /api/party[/:code[/events|/action]]  - watch party rooms');
+  console.log('  /api/auth, /api/me, /api/users/:id   - accounts');
   console.log('Video sources: ' + DOOPLAY_SITES.map(function(s) { return s.name; }).join(', '));
 });
