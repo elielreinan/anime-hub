@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <link rel="manifest" href="manifest.json">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.17/dist/hls.min.js"></script>
+  <script src="vendor/hls.min.js"></script>
   <title>Anime Hub</title>
   <style>
     :root { --accent: #FF5A26; --bg: #0D0D12; --card: #1A1A24; --border: #1f2937; --muted: #6b7280; --text: #e5e7eb; }
@@ -259,7 +259,15 @@
     .player-overlay.iframe-mode .iframe-note { display: block; }
 
     /* Watch party */
-    .party-panel { display: none; position: absolute; left: 0; right: 0; bottom: 0; max-height: 70%; z-index: 20; background: #111118; border-top: 1px solid #2d2d3d; border-radius: 16px 16px 0 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); flex-direction: column; gap: 12px; }
+    .party-panel { display: none; position: fixed; left: 50%; transform: translateX(-50%); width: min(100%, 560px); bottom: 0; max-height: 80vh; z-index: 270; background: #111118; border: 1px solid #2d2d3d; border-bottom: none; border-radius: 16px 16px 0 0; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom)); flex-direction: column; gap: 12px; }
+    .party-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 265; }
+    .party-backdrop.show { display: block; }
+    .party-now { background: var(--card); border: 1px solid #2d2d3d; border-radius: 12px; padding: 10px 12px; font-size: 13px; line-height: 1.5; }
+    .party-pill { display: none; position: fixed; left: 50%; transform: translateX(-50%); bottom: 84px; z-index: 160; background: var(--accent); color: #fff; border: none; border-radius: 999px; padding: 10px 18px; font-weight: 700; font-family: inherit; font-size: 13px; box-shadow: 0 6px 20px rgba(255,90,38,0.4); cursor: pointer; white-space: nowrap; }
+    .party-pill.show { display: block; }
+    .header-party { gap: 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.25); padding: 7px 12px; font-size: 12px; font-weight: 700; font-family: inherit; }
+    .header-party.active { border-color: var(--accent); color: var(--accent); }
+    @media (max-width: 360px) { #header-party-label { display: none; } }
     .party-panel.show { display: flex; }
     .party-head { display: flex; align-items: center; justify-content: space-between; font-weight: 800; }
     .party-code { font-size: 28px; font-weight: 900; letter-spacing: 6px; color: var(--accent); text-align: center; }
@@ -328,6 +336,7 @@
   <header class="header">
     <h1 class="logo"><span class="logo-accent">ANIME</span>HUB</h1>
     <div class="header-actions">
+      <button class="header-btn header-party" id="header-party-btn" aria-label="Assistir junto" onclick="openPartySheet()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span id="header-party-label">Juntos</span></button>
       <button class="header-btn" aria-label="Notificações" onclick="openNotifications()"><span class="badge-dot" id="notif-dot"></span>
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
       </button>
@@ -476,7 +485,6 @@
         <button onclick="nextEpisode()">Assistir agora</button>
         <button onclick="cancelNextCountdown()">Cancelar</button>
       </div>
-      <div class="party-panel" id="party-panel"></div>
     </div>
     <div class="player-controls">
       <div class="player-servers" id="player-servers"></div>
@@ -508,6 +516,11 @@
     </div>
     <div id="notifications-body"></div>
   </div>
+
+  <!-- WATCH PARTY -->
+  <div class="party-backdrop" id="party-backdrop" onclick="closePartySheet()"></div>
+  <div class="party-panel" id="party-panel" role="dialog" aria-label="Assistir junto"></div>
+  <button class="party-pill" id="party-pill" onclick="openPartySheet()"></button>
 
   <!-- COOKIES -->
   <div class="cookie-banner" id="cookie-banner" role="dialog" aria-label="Aviso de cookies">
@@ -1125,6 +1138,7 @@
       document.getElementById('player-overlay').classList.add('show');
       setPlayerStatus('Procurando servidores...', true);
       partyEpisodeOpened(ep);
+      if (party) { updatePartyUi(); renderPartyNow(); }
 
       var slowTimer = setTimeout(function() {
         if (requestId === playerRequestId && playerServerIndex < 0) setPlayerStatus('Acordando o servidor... na primeira vez pode levar até 1 minuto.', true);
@@ -1212,6 +1226,12 @@
         });
         hls.loadSource(src);
         hls.attachMedia(videoEl);
+      } else if (e.kind === 'hls' && !videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+        failed = true;
+        var btn = document.getElementById('player-servers').children[playerServerIndex];
+        if (btn) btn.classList.add('failed');
+        tryNextServer();
+        return;
       } else {
         videoEl.src = src;
       }
@@ -1295,10 +1315,9 @@
       playerRequestId++;
       resetPlayerMedia();
       cancelNextCountdown();
-      document.getElementById('party-panel').classList.remove('show');
       document.getElementById('player-overlay').classList.remove('show');
       renderContinueWatching();
-      if (party) leaveParty();
+      if (party) updatePartyUi();
     }
 
     function skipOpening() {
@@ -1630,12 +1649,18 @@
       });
     }
 
+    function playerIsOpen() { return document.getElementById('player-overlay').classList.contains('show'); }
+    function partySheetOpen() { return document.getElementById('party-panel').classList.contains('show'); }
+
+    // A room exists on its own: create it from anywhere, then whoever opens an
+    // episode takes everyone in the room along.
     function createParty() {
-      if (!currentAnime) return;
-      partyApi('', {
-        animeId: currentAnime.id, title: getTitle(currentAnime), cover: getCover(currentAnime),
-        ep: playerEpisode, totalEps: playerTotalEps, time: videoEl.currentTime || 0, playing: !videoEl.paused
-      }).then(function(res) {
+      var body = {};
+      if (playerIsOpen() && currentAnime) {
+        body = { animeId: currentAnime.id, title: getTitle(currentAnime), cover: getCover(currentAnime),
+          ep: playerEpisode, totalEps: playerTotalEps, time: videoEl.currentTime || 0, playing: !videoEl.paused };
+      }
+      partyApi('', body).then(function(res) {
         connectParty(res.code);
         renderPartyPanel();
       }).catch(function() { showToast('Não foi possível criar a sala'); });
@@ -1645,32 +1670,17 @@
       code = String(code || '').trim().toUpperCase();
       if (!code) return;
       partyApi('/' + encodeURIComponent(code)).then(function(res) {
-        var s = res.state;
-        var ready = (currentAnime && String(currentAnime.id) === String(s.animeId)) ? Promise.resolve() :
-          Promise.all([atvFetch('info=' + s.animeId), atvFetch('cat_id=' + s.animeId)]).then(function(r) {
-            currentAnime = (r[0] && r[0][0]) || { id: s.animeId };
-            currentAnimeEpisodes = r[1] || [];
-          }, function() {
-            currentAnime = { id: s.animeId };
-          }).then(function() {
-            // Same title as the host, so everyone resolves the same servers.
-            currentAnime.category_name = s.title;
-          });
-        return ready.then(function() {
-          connectParty(code);
-          partyPendingSync = { time: s.time + (s.playing ? s.elapsed : 0), playing: s.playing };
-          partyRemoteEpisode = true;
-          openPlayer(s.animeId, s.ep, s.totalEps || currentAnimeEpisodes.length);
-          partyRemoteEpisode = false;
-          document.getElementById('party-panel').classList.remove('show');
-          showToast('Você entrou na sala ' + code);
-        });
+        // The 'state' event that arrives on connect opens the room's episode, if any.
+        connectParty(code);
+        showToast('Você entrou na sala ' + code);
+        if (!res.state.animeId || !res.state.ep) openPartySheet();
+        else closePartySheet();
       }).catch(function() { showToast('Sala não encontrada'); });
     }
 
     function connectParty(code) {
       if (party && party.events) party.events.close();
-      party = { code: code, members: 1, names: [], messages: [], events: null };
+      party = { code: code, members: 1, names: [], messages: [], state: null, events: null };
       var es = new EventSource(getApiBase() + '/api/party/' + encodeURIComponent(code) + '/events?clientId=' + CLIENT_ID + '&name=' + encodeURIComponent(partyName()));
       party.events = es;
       es.onmessage = function(m) {
@@ -1678,7 +1688,7 @@
         try { ev = JSON.parse(m.data); } catch (e) { return; }
         handlePartyEvent(ev);
       };
-      updatePartyButton();
+      updatePartyUi();
     }
 
     function leaveParty() {
@@ -1686,32 +1696,40 @@
       if (party.events) party.events.close();
       party = null;
       partyPendingSync = null;
-      updatePartyButton();
+      updatePartyUi();
       renderPartyPanel();
       showToast('Você saiu da sala');
     }
 
+    function isSameEpisode(st) {
+      return playerIsOpen() && currentAnime && String(currentAnime.id) === String(st.animeId) && playerEpisode === st.ep;
+    }
+
     function handlePartyEvent(ev) {
       if (!party) return;
-      if (ev.type === 'members') { party.members = ev.count; party.names = ev.names || []; updatePartyButton(); renderPartyMembers(); return; }
+      if (ev.type === 'members') { party.members = ev.count; party.names = ev.names || []; updatePartyUi(); renderPartyMembers(); return; }
       if (ev.type === 'chat') { appendPartyMessage(ev.name, ev.text); return; }
       if (ev.type === 'join' || ev.type === 'leave') { appendPartyMessage(null, ev.name + (ev.type === 'join' ? ' entrou na sala' : ' saiu da sala')); return; }
       if (ev.type === 'state') {
         var st = ev.state;
+        party.state = st;
+        renderPartyNow();
+        if (!st.animeId || !st.ep) return;
         var sync = { time: st.time + (st.playing ? st.elapsed : 0), playing: st.playing };
-        if (st.ep !== playerEpisode) remoteEpisode(st.ep, sync);
+        if (!isSameEpisode(st)) openRemoteEpisode(st, sync);
         else if (videoEl.duration) applyPartySync(sync);
         else partyPendingSync = sync;
         return;
       }
-      if (ev.from === CLIENT_ID) return;
       if (ev.type === 'episode') {
-        if (ev.ep !== playerEpisode) {
-          remoteEpisode(ev.ep, { time: 0, playing: true });
-          appendPartyMessage(null, ev.name + ' mudou para o episódio ' + ev.ep);
-        }
+        party.state = { animeId: ev.animeId, title: ev.title, cover: ev.cover, totalEps: ev.totalEps, ep: ev.ep };
+        renderPartyNow();
+        if (ev.from === CLIENT_ID || isSameEpisode(ev)) return;
+        appendPartyMessage(null, ev.name + ' abriu ' + ev.title + ' — Ep ' + ev.ep);
+        openRemoteEpisode(ev, { time: 0, playing: true });
         return;
       }
+      if (ev.from === CLIENT_ID) return;
       var remote = { time: ev.time, playing: ev.playing };
       if (!videoEl.duration) { partyPendingSync = remote; return; }
       applyPartySync(remote);
@@ -1719,11 +1737,36 @@
       if (verb) showToast(ev.name + ' ' + verb);
     }
 
-    function remoteEpisode(ep, sync) {
+    function openRemoteEpisode(st, sync) {
       partyPendingSync = sync;
-      partyRemoteEpisode = true;
-      openPlayer(playerAnimeId, ep, playerTotalEps);
-      partyRemoteEpisode = false;
+      var ready = Promise.resolve();
+      if (!currentAnime || String(currentAnime.id) !== String(st.animeId)) {
+        document.getElementById('detail-page').classList.remove('show');
+        ready = Promise.all([atvFetch('info=' + st.animeId), atvFetch('cat_id=' + st.animeId)]).then(function(r) {
+          currentAnime = (r[0] && r[0][0]) || { id: st.animeId };
+          currentAnimeEpisodes = r[1] || [];
+        }, function() {
+          currentAnime = { id: st.animeId };
+          currentAnimeEpisodes = [];
+        }).then(function() {
+          // Same title as whoever opened it, so everyone resolves the same servers.
+          currentAnime.category_name = st.title;
+        });
+      }
+      return ready.then(function() {
+        partyRemoteEpisode = true;
+        openPlayer(st.animeId, st.ep, st.totalEps || currentAnimeEpisodes.length);
+        partyRemoteEpisode = false;
+      });
+    }
+
+    function goToPartyEpisode() {
+      if (!party) return;
+      partyApi('/' + party.code).then(function(res) {
+        var st = res.state;
+        closePartySheet();
+        openRemoteEpisode(st, { time: st.time + (st.playing ? st.elapsed : 0), playing: st.playing });
+      }).catch(function() { showToast('Não foi possível abrir o episódio da sala'); });
     }
 
     function applyPartySync(sync) {
@@ -1744,8 +1787,11 @@
     }
 
     function partyEpisodeOpened(ep) {
-      if (!party || partyRemoteEpisode) return;
-      partyApi('/' + party.code + '/action', { clientId: CLIENT_ID, name: partyName(), type: 'episode', ep: ep }).catch(function() {});
+      if (!party || partyRemoteEpisode || !currentAnime) return;
+      partyApi('/' + party.code + '/action', {
+        clientId: CLIENT_ID, name: partyName(), type: 'episode', ep: ep,
+        animeId: currentAnime.id, title: getTitle(currentAnime), cover: getCover(currentAnime), totalEps: playerTotalEps
+      }).catch(function() {});
     }
 
     function sendPartyChat() {
@@ -1776,9 +1822,16 @@
       return el;
     }
 
-    function updatePartyButton() {
-      document.getElementById('party-btn').classList.toggle('active', !!party);
-      document.getElementById('party-btn-label').textContent = party ? party.code + ' · ' + party.members : 'Juntos';
+    function updatePartyUi() {
+      var inRoom = !!party;
+      var count = inRoom ? party.members + (party.members === 1 ? ' pessoa' : ' pessoas') : '';
+      document.getElementById('party-btn').classList.toggle('active', inRoom);
+      document.getElementById('party-btn-label').textContent = inRoom ? party.code + ' · ' + party.members : 'Juntos';
+      document.getElementById('header-party-btn').classList.toggle('active', inRoom);
+      document.getElementById('header-party-label').textContent = inRoom ? party.code : 'Juntos';
+      var pill = document.getElementById('party-pill');
+      pill.textContent = inRoom ? 'Sala ' + party.code + ' · ' + count : '';
+      pill.classList.toggle('show', inRoom && !playerIsOpen() && !partySheetOpen());
     }
 
     function renderPartyMembers() {
@@ -1786,19 +1839,42 @@
       if (el && party) el.textContent = party.members + (party.members === 1 ? ' pessoa' : ' pessoas') + ' na sala' + (party.names.length ? ': ' + party.names.join(', ') : '');
     }
 
-    function togglePartyPanel() {
-      var panel = document.getElementById('party-panel');
-      if (panel.classList.contains('show')) { panel.classList.remove('show'); return; }
+    function renderPartyNow() {
+      var el = document.getElementById('party-now');
+      if (!el || !party) return;
+      var st = party.state;
+      if (st && st.animeId && st.ep) {
+        el.innerHTML = 'Assistindo agora: <b>' + escapeHtml(st.title) + ' — Ep ' + st.ep + '</b>' +
+          (isSameEpisode(st) ? '' : '<div style="margin-top:8px"><button class="party-btn" onclick="goToPartyEpisode()">Ir para o episódio</button></div>');
+      } else {
+        el.innerHTML = 'Ninguém escolheu um anime ainda. Abra um anime e toque em um episódio: todo mundo na sala vai junto.' +
+          '<div style="margin-top:8px"><button class="party-btn ghost" onclick="closePartySheet();closePlayer();switchTab(\'explore\')">Escolher anime</button></div>';
+      }
+    }
+
+    function openPartySheet() {
       renderPartyPanel();
-      panel.classList.add('show');
+      document.getElementById('party-panel').classList.add('show');
+      document.getElementById('party-backdrop').classList.add('show');
+      updatePartyUi();
+    }
+
+    function closePartySheet() {
+      document.getElementById('party-panel').classList.remove('show');
+      document.getElementById('party-backdrop').classList.remove('show');
+      updatePartyUi();
+    }
+
+    function togglePartyPanel() {
+      if (partySheetOpen()) closePartySheet(); else openPartySheet();
     }
 
     function renderPartyPanel() {
       var panel = document.getElementById('party-panel');
-      var head = '<div class="party-head"><span>Assistir junto</span><button class="player-close" onclick="togglePartyPanel()" aria-label="Fechar">✕</button></div>';
+      var head = '<div class="party-head"><span>Assistir junto</span><button class="player-close" onclick="closePartySheet()" aria-label="Fechar">✕</button></div>';
       if (!party) {
         panel.innerHTML = head +
-          '<div class="party-muted">Crie uma sala e mande o link. Play, pause, pulos e troca de episódio ficam sincronizados para todo mundo.</div>' +
+          '<div class="party-muted">Crie uma sala, mande o link pra galera e escolham juntos o que assistir. Quando alguém abrir um episódio, todo mundo na sala vai junto, com play, pause e pulos sincronizados.</div>' +
           '<button class="party-btn" onclick="createParty()">Criar sala</button>' +
           '<div class="party-row"><input id="party-code-input" maxlength="8" placeholder="Código da sala" autocapitalize="characters" onkeydown="if(event.key===\'Enter\')joinParty(this.value)">' +
           '<button class="party-btn ghost" onclick="joinParty(document.getElementById(\'party-code-input\').value)">Entrar</button></div>';
@@ -1807,19 +1883,21 @@
       panel.innerHTML = head +
         '<div class="party-code">' + escapeHtml(party.code) + '</div>' +
         '<div class="party-row"><button class="party-btn" style="flex:1" onclick="shareParty()">Convidar</button><button class="party-btn ghost" onclick="leaveParty()">Sair da sala</button></div>' +
+        '<div class="party-now" id="party-now"></div>' +
         '<div class="party-muted" id="party-members"></div>' +
         '<div class="party-chat" id="party-chat"></div>' +
         '<div class="party-row"><input id="party-chat-input" maxlength="300" placeholder="Mensagem" onkeydown="if(event.key===\'Enter\')sendPartyChat()"><button class="party-btn" onclick="sendPartyChat()">Enviar</button></div>';
       var chat = document.getElementById('party-chat');
       party.messages.forEach(function(m) { chat.appendChild(partyMessageEl(m.name, m.text)); });
       chat.scrollTop = chat.scrollHeight;
+      renderPartyNow();
       renderPartyMembers();
     }
 
     function shareParty() {
       if (!party) return;
       var link = location.origin + location.pathname + '?party=' + party.code;
-      var text = 'Bora assistir ' + (currentAnime ? getTitle(currentAnime) : 'anime') + ' junto no AnimeHub? Sala ' + party.code;
+      var text = 'Bora assistir anime junto no AnimeHub? Entra na sala ' + party.code;
       if (navigator.share) { navigator.share({ title: 'AnimeHub', text: text, url: link }).catch(function() {}); return; }
       if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('Link da sala copiado'); }, function() { prompt('Copie o link da sala:', link); });
       else prompt('Copie o link da sala:', link);

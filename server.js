@@ -433,6 +433,16 @@ function verifyStream(kind, url, referer) {
 }
 
 // Fetch an embed page and pull the stream out of its player setup.
+// 720p (or the best below it) plays on nearly every phone; 1080p files are more often
+// HEVC or high-profile, so they are offered as a separate server instead of the default.
+function pickQualities(media) {
+  var compatible = media.filter(function(m) { return qualityRank(m.quality) >= 1; })[0] || media[0];
+  var picks = [compatible];
+  var hd = media.filter(function(m) { return qualityRank(m.quality) === 0; })[0];
+  if (hd && hd !== compatible) picks.push(hd);
+  return picks;
+}
+
 function resolveGeneric(url, site) {
   return fetchUrl(url, 5, 8000, { Referer: site.base + '/' }).then(function(r) {
     if (r.status >= 400) return null;
@@ -440,7 +450,7 @@ function resolveGeneric(url, site) {
     if (DEAD_EMBED_TEXT.test(html.slice(0, 20000))) return null;
     var media = extractMedia(unpackAll(html));
     var origin = new URL(r.url).origin + '/';
-    return media.length ? { media: media[0], referer: origin } : { media: null, referer: origin };
+    return { media: media.length ? pickQualities(media) : [], referer: origin };
   }).catch(function() { return null; });
 }
 
@@ -467,11 +477,13 @@ function resolvePlayer(url, site) {
   }
   return resolveGeneric(url, site).then(function(res) {
     if (!res) return null;
-    if (res.media) {
-      return verifyStream(res.media.kind, res.media.url, res.referer).then(function(ok) {
-        if (!ok) return null;
-        return { kind: res.media.kind, url: res.media.url, referer: res.referer, name: host.split('.')[0] + (res.media.quality ? ' ' + res.media.quality : ''), rank: 0 };
-      });
+    if (res.media.length) {
+      return Promise.all(res.media.map(function(m, i) {
+        return verifyStream(m.kind, m.url, res.referer).then(function(ok) {
+          if (!ok) return null;
+          return { kind: m.kind, url: m.url, referer: res.referer, name: host.split('.')[0] + (m.quality ? ' ' + m.quality : ''), rank: i === 0 ? 0 : 3 };
+        });
+      }));
     }
     // The source site's own pages (interstitials, donation walls) are not players.
     if (host === hostName(site.base)) return null;
@@ -506,7 +518,7 @@ function findEpisodeEmbeds(title, episode, lang) {
         if (!epUrl) { trace.push(tag + ': episode ' + epNum + ' not found'); return []; }
         return getEpisodeEmbeds(site, epUrl, trace).then(function(urls) {
           return Promise.all(urls.map(function(u) { return resolvePlayer(u, site); })).then(function(players) {
-            var usable = players.filter(Boolean);
+            var usable = [].concat.apply([], players).filter(Boolean);
             trace.push(tag + ': ' + urls.length + ' options, ' + usable.length + ' usable');
             return usable.map(function(p) {
               return {
@@ -726,7 +738,7 @@ function handleParty(req, res, pathname, urlObj) {
         code: c, clients: [], lastActive: Date.now(),
         state: {
           animeId: cleanText(b.animeId, 20), title: cleanText(b.title, 200), cover: cleanText(b.cover, 500),
-          ep: +b.ep || 1, totalEps: +b.totalEps || 0, time: +b.time || 0, playing: !!b.playing, at: Date.now()
+          ep: +b.ep || 0, totalEps: +b.totalEps || 0, time: +b.time || 0, playing: !!b.playing, at: Date.now()
         }
       };
       sendJSON(res, 200, { code: c });
@@ -769,8 +781,12 @@ function handleParty(req, res, pathname, urlObj) {
         msg.text = cleanText(b.text, 300).trim();
         if (!msg.text) return sendJSON(res, 400, { error: true, message: 'Mensagem vazia' });
       } else if (b.type === 'episode') {
+        if (b.animeId) {
+          s.animeId = cleanText(b.animeId, 20); s.title = cleanText(b.title, 200);
+          s.cover = cleanText(b.cover, 500); s.totalEps = +b.totalEps || 0;
+        }
         s.ep = +b.ep || s.ep; s.time = 0; s.playing = true; s.at = Date.now();
-        msg.ep = s.ep;
+        msg.animeId = s.animeId; msg.title = s.title; msg.cover = s.cover; msg.totalEps = s.totalEps; msg.ep = s.ep;
       } else {
         s.time = +b.time || 0;
         s.playing = b.type === 'play' ? true : b.type === 'pause' ? false : !!b.playing;

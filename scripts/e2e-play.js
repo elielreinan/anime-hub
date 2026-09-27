@@ -71,28 +71,26 @@ async function runCase(browser, title, ep) {
   return ok;
 }
 
-// Two viewers in one room: a seek on A must move B to the same point.
+// Room-first party: A creates a room on the home screen, B joins through the link,
+// A opens an episode and B must follow; then a seek on A must move B too.
 async function partyCase(browser, title, ep) {
   const a = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await a.goto(APP, { waitUntil: 'load' });
-  await a.evaluate(([title, ep]) => { currentAnime = { id: 1, category_name: title }; openPlayer(1, ep, 9999); }, [title, ep]);
-  await a.waitForFunction(() => document.querySelectorAll('.server-btn').length > 0, null, { timeout: 90000 }).catch(() => {});
-  await a.evaluate(() => { const i = playerEmbeds.findIndex(e => e.kind !== 'iframe'); if (i > 0) selectServer(i); });
-  const playing = await a.waitForFunction(() => { const v = document.getElementById('player-video'); return v.style.display !== 'none' && v.currentTime > 1; }, null, { timeout: 120000 }).then(() => true, () => false);
-  if (!playing) { console.log('\nparty: no own-player stream for ' + title); await a.close(); return false; }
   await a.evaluate(() => createParty());
-  await a.waitForFunction(() => party && document.querySelector('.party-code'), null, { timeout: 30000 });
+  await a.waitForFunction(() => party && document.querySelector('.party-code'), null, { timeout: 60000 });
   const code = await a.evaluate(() => party.code);
   const b = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await b.goto(APP + '?party=' + code, { waitUntil: 'load' });
-  await b.waitForFunction(() => document.getElementById('player-video').readyState >= 2, null, { timeout: 120000 }).catch(() => {});
   await a.waitForFunction(() => party.members === 2, null, { timeout: 30000 }).catch(() => {});
+  await a.evaluate(([title, ep]) => { closePartySheet(); currentAnime = { id: 1, category_name: title }; openPlayer(1, ep, 9999); }, [title, ep]);
+  const followed = await b.waitForFunction(ep => playerIsOpen() && playerEpisode === ep && document.getElementById('player-video').readyState >= 2, ep, { timeout: 120000 }).then(() => true, () => false);
+  await a.waitForFunction(() => document.getElementById('player-video').readyState >= 2, null, { timeout: 120000 }).catch(() => {});
   await a.evaluate(() => { const v = document.getElementById('player-video'); v.currentTime = 120; v.play(); });
   await a.waitForTimeout(8000);
   const ta = await a.evaluate(() => document.getElementById('player-video').currentTime);
   const tb = await b.evaluate(() => document.getElementById('player-video').currentTime);
-  const ok = Math.abs(ta - tb) < 3 && tb > 100;
-  console.log('\nparty ' + code + ' (' + title + '): A=' + ta.toFixed(1) + 's B=' + tb.toFixed(1) + 's => ' + (ok ? 'OK' : 'FAIL'));
+  const ok = followed && Math.abs(ta - tb) < 3 && tb > 100;
+  console.log('\nparty ' + code + ' (' + title + '): B followed=' + followed + ' A=' + ta.toFixed(1) + 's B=' + tb.toFixed(1) + 's => ' + (ok ? 'OK' : 'FAIL'));
   await a.close();
   await b.close();
   return ok;
