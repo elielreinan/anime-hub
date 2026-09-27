@@ -980,8 +980,12 @@
           var d = data.data;
           if (d.type === 'direct' && d.video_url) {
             loadVideo(d.video_url, d.isM3U8 || false, d.referer || '');
+          } else if (d.type === 'embed' && d.embed_url) {
+            loadEmbed(d.embed_url);
           } else if (d.type === 'embed' && d.embed_urls && d.embed_urls.length > 0) {
             loadEmbed(d.embed_urls[0]);
+          } else if (d.video_url) {
+            loadVideo(d.video_url, d.isM3U8 || false, d.referer || '');
           } else {
             showPlayerError('Vídeo indisponível nesta fonte');
           }
@@ -1001,7 +1005,8 @@
     function loadEmbed(embedUrl) {
       playerHasVideo = true;
       var iframe = document.getElementById('player-iframe');
-      iframe.src = embedUrl;
+      var proxyUrl = getApiBase() + '/api/proxy?url=' + encodeURIComponent(embedUrl);
+      iframe.src = proxyUrl;
       iframe.style.display = 'block';
       document.getElementById('player-video').style.display = 'none';
       document.getElementById('player-placeholder').style.display = 'none';
