@@ -8,6 +8,9 @@ on:
       app_url:
         description: App URL to test (default runs the server locally)
         default: http://localhost:3000/
+      only:
+        description: Set to "party" to run only the watch party check
+        default: ''
 
 jobs:
   playback:
@@ -34,9 +37,12 @@ jobs:
       - name: Playback end-to-end (real Chrome)
         env:
           APP_URL: ${{ inputs.app_url }}
+          ONLY: ${{ inputs.only }}
         run: node scripts/e2e-play.js "${APP_URL:-http://localhost:3000/}"
       - name: Playback end-to-end (WebKit, Safari engine)
         if: ${{ !cancelled() && (inputs.app_url == '' || startsWith(inputs.app_url, 'http://localhost')) }}
+        env:
+          ONLY: ${{ inputs.only }}
         run: npx playwright install --with-deps webkit && BROWSER=webkit node scripts/e2e-play.js
       - name: Server log
         if: always()
