@@ -433,6 +433,9 @@ function verifyStream(kind, url, referer) {
 }
 
 // Fetch an embed page and pull the stream out of its player setup.
+// Markers of an actual video player page; parked domains and landers have none of them.
+var PLAYER_PAGE = /<video|jwplayer|playerjs|plyr|videojs|video\.js|clappr|\.m3u8|\.mp4|hls\.js|<iframe[^>]+(?:embed|player)/i;
+
 // 720p (or the best below it) plays on nearly every phone; 1080p files are more often
 // HEVC or high-profile, so they are offered as a separate server instead of the default.
 function pickQualities(media) {
@@ -450,7 +453,7 @@ function resolveGeneric(url, site) {
     if (DEAD_EMBED_TEXT.test(html.slice(0, 20000))) return null;
     var media = extractMedia(unpackAll(html));
     var origin = new URL(r.url).origin + '/';
-    return { media: media.length ? pickQualities(media) : [], referer: origin };
+    return { media: media.length ? pickQualities(media) : [], referer: origin, playerLike: PLAYER_PAGE.test(html) };
   }).catch(function() { return null; });
 }
 
@@ -485,8 +488,9 @@ function resolvePlayer(url, site) {
         });
       }));
     }
-    // The source site's own pages (interstitials, donation walls) are not players.
-    if (host === hostName(site.base)) return null;
+    // The source site's own pages (interstitials, donation walls) and pages without any
+    // player (parked domains) are not offered.
+    if (host === hostName(site.base) || !res.playerLike) return null;
     return { kind: 'iframe', url: url, name: host.split('.')[0] + ' (externo)', rank: 8 };
   });
 }

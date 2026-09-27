@@ -1243,6 +1243,7 @@
       clearTimeout(playerWatchdog);
       if (window._hls) { try { window._hls.destroy(); } catch (e) {} window._hls = null; }
       videoEl.onerror = null;
+      lastPlaybackTime = 0;
       programmaticPause();
       videoEl.removeAttribute('src');
       videoEl.load();
@@ -1287,6 +1288,7 @@
     });
 
     videoEl.addEventListener('timeupdate', function() {
+      if (!videoEl.seeking) lastPlaybackTime = videoEl.currentTime;
       document.getElementById('skip-opening-btn').style.visibility = videoEl.currentTime < 360 ? 'visible' : 'hidden';
       if (Date.now() - lastProgressSave > 5000) saveCurrentProgress();
     });
@@ -1301,7 +1303,15 @@
     videoEl.addEventListener('pause', function() { if (!isOwnMediaEvent('pause') && !videoEl.ended) partyLocalAction('pause'); });
     // 'seeking' carries the target time right away; 'seeked' waits for the new position to
     // buffer, which on Safari can take long enough that the room never hears about the seek.
-    videoEl.addEventListener('seeking', function() { if (!isOwnMediaEvent('seek')) partyLocalAction('seek'); });
+    // Jumps under 2s are the player skipping buffer gaps (hls.js does this at the start),
+    // not the viewer, and the room ignores drift that small anyway.
+    var lastPlaybackTime = 0;
+    videoEl.addEventListener('seeking', function() {
+      var own = isOwnMediaEvent('seek');
+      var jump = Math.abs(videoEl.currentTime - lastPlaybackTime);
+      lastPlaybackTime = videoEl.currentTime;
+      if (!own && jump >= 2) partyLocalAction('seek');
+    });
 
     function saveCurrentProgress(forcePct) {
       if (!currentAnime || !playerEpisode) return;
