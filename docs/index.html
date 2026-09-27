@@ -960,17 +960,19 @@
             if (!data.error && data.video_url) {
               loadVideo(data.video_url);
             } else {
-              fetchEpisodeFallback(slug, ep);
+              fetchEpisodeFallback(slug, ep, videoId);
             }
           })
-          .catch(function() { fetchEpisodeFallback(slug, ep); });
+          .catch(function() { fetchEpisodeFallback(slug, ep, videoId); });
       } else {
-        fetchEpisodeFallback(slug, ep);
+        fetchEpisodeFallback(slug, ep, null);
       }
     }
 
-    function fetchEpisodeFallback(slug, ep) {
+    function fetchEpisodeFallback(slug, ep, atvVideoId) {
+      document.getElementById('player-status').textContent = 'Buscando fontes alternativas...';
       var apiUrl = getApiBase() + '/api/episode/' + encodeURIComponent(slug) + '/' + ep;
+      if (atvVideoId) apiUrl += '?atv_id=' + atvVideoId;
       fetch(apiUrl).then(function(r) { return r.json(); }).then(function(data) {
         if (!data.error && data.data) {
           var d = data.data;
@@ -979,19 +981,19 @@
           } else if (d.type === 'embed' && d.embed_urls && d.embed_urls.length > 0) {
             loadEmbed(d.embed_urls[0]);
           } else {
-            showPlayerError('Formato de vídeo não suportado');
+            showPlayerError('Vídeo indisponível nesta fonte');
           }
         } else {
-          showPlayerError('Episódio não encontrado');
+          showPlayerError('Episódio não disponível no momento');
         }
       }).catch(function() {
-        showPlayerError('Servidor offline. Inicie: node server.js');
+        showPlayerError('Erro de conexão com o servidor');
       });
     }
 
     function showPlayerError(msg) {
       document.getElementById('player-spinner').style.display = 'none';
-      document.getElementById('player-status').textContent = msg;
+      document.getElementById('player-status').innerHTML = msg + '<br><button onclick="closePlayer()" style="margin-top:16px;padding:10px 24px;background:var(--accent);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Voltar</button>';
     }
 
     function loadEmbed(embedUrl) {
