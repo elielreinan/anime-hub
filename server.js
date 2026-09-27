@@ -24,7 +24,11 @@ var BLOCKED_GENRES = [
   'sexual', 'adult', 'r-18', 'r18', 'pornô', 'xxx', 'sukebe'
 ];
 
-var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+
+// Domains with known SSL certificate issues - use relaxed verification
+var RELAXED_SSL_DOMAINS = ['betteranime.net', 'betteranime.com'];
+var relaxedAgent = new https.Agent({ rejectUnauthorized: false });
 
 // ── Utility Functions ───────────────────────────────────────────────────────
 
@@ -33,13 +37,24 @@ function fetchUrl(targetUrl, maxRedirects) {
   return new Promise(function(resolve, reject) {
     if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
     var mod = targetUrl.startsWith('https') ? https : http;
-    var req = mod.get(targetUrl, {
+    var options = {
       headers: {
         'User-Agent': USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8'
+        'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+        'Accept-Encoding': 'identity'
       }
-    }, function(res) {
+    };
+
+    // Relax SSL for domains with certificate issues
+    try {
+      var host = new URL(targetUrl).hostname;
+      if (RELAXED_SSL_DOMAINS.some(function(d) { return host.indexOf(d) !== -1; })) {
+        options.agent = relaxedAgent;
+      }
+    } catch(e) {}
+
+    var req = mod.get(targetUrl, options, function(res) {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         var loc = res.headers.location;
         if (loc.startsWith('/')) {
@@ -345,16 +360,46 @@ function extractVideoFromPage(html) {
     }
   }
 
+  // JWPlayer / video player configs (file:"url", source:"url")
+  var playerRegex = /["'](?:file|source|src|url|video_url|videoUrl|stream_url|streamUrl|link)["']\s*:\s*["'](https?:\/\/[^"']+)["']/gi;
+  while ((match = playerRegex.exec(html)) !== null) {
+    var pUrl = match[1].replace(/\\\//g, '/').replace(/\\u0026/g, '&');
+    if (results.videos.indexOf(pUrl) === -1) results.videos.push(pUrl);
+  }
+
+  // data-video, data-src, data-file attributes on any element
+  var dataAttrRegex = /data-(?:video|src|file|url|stream)=["'](https?:\/\/[^"']+)["']/gi;
+  while ((match = dataAttrRegex.exec(html)) !== null) {
+    var daUrl = match[1].replace(/&amp;/g, '&');
+    if (results.videos.indexOf(daUrl) === -1) results.videos.push(daUrl);
+  }
+
+  // Video tag src directly
+  var videoTagRegex = /<video[^>]+src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = videoTagRegex.exec(html)) !== null) {
+    var vtUrl = match[1].replace(/&amp;/g, '&');
+    if (results.videos.indexOf(vtUrl) === -1) results.videos.push(vtUrl);
+  }
+
   // Iframes (Blogger, Google Drive, players)
-  var iframeRegex = /<iframe[^>]+(?:src|data-src)=["']([^"']+)["'][^>]*>/gi;
+  var iframeRegex = /<iframe[^>]+(?:src|data-src|data-lazy-src)=["']([^"']+)["'][^>]*>/gi;
   while ((match = iframeRegex.exec(html)) !== null) {
     var src = match[1].replace(/&amp;/g, '&');
+    if (src.indexOf('http') !== 0) continue;
     if (src.includes('blogger.com') || src.includes('blogspot.com')) {
       if (results.bloggerEmbeds.indexOf(src) === -1) results.bloggerEmbeds.push(src);
     } else if (src.includes('drive.google') || src.includes('docs.google') ||
-               src.includes('player') || src.includes('embed') || src.includes('video')) {
+               src.includes('player') || src.includes('embed') || src.includes('video') ||
+               src.includes('stream') || src.includes('watch') || src.includes('play')) {
       if (results.embeds.indexOf(src) === -1) results.embeds.push(src);
     }
+  }
+
+  // Links to .mp4/.m3u8 files (some sites use <a> tags)
+  var linkRegex = /<a[^>]+href=["'](https?:\/\/[^"']+\.(?:mp4|m3u8)[^"']*)["']/gi;
+  while ((match = linkRegex.exec(html)) !== null) {
+    var lUrl = match[1].replace(/&amp;/g, '&');
+    if (results.videos.indexOf(lUrl) === -1) results.videos.push(lUrl);
   }
 
   return results;
@@ -429,12 +474,22 @@ function scrapeVideoFromUrls(urls, providerName) {
         });
       }
 
-      // Other embeds - try to resolve
+      // Other embeds - try to resolve each one
       if (sources.embeds.length > 0) {
-        return resolveEmbedUrl(sources.embeds[0]).then(function(videoUrl) {
-          if (videoUrl) {
-            return { provider: providerName, video_url: videoUrl, type: 'direct', isM3U8: videoUrl.indexOf('.m3u8') !== -1 };
-          }
+        var embedIdx = 0;
+        function tryNextEmbed() {
+          if (embedIdx >= sources.embeds.length) return Promise.resolve(null);
+          var embedUrl = sources.embeds[embedIdx++];
+          console.log('[' + providerName + '] Resolving embed:', embedUrl.substring(0, 80));
+          return resolveEmbedUrl(embedUrl).then(function(videoUrl) {
+            if (videoUrl) {
+              return { provider: providerName, video_url: videoUrl, type: 'direct', isM3U8: videoUrl.indexOf('.m3u8') !== -1 };
+            }
+            return tryNextEmbed();
+          }).catch(function() { return tryNextEmbed(); });
+        }
+        return tryNextEmbed().then(function(result) {
+          if (result) return result;
           return { provider: providerName, embed_url: sources.embeds[0], type: 'embed' };
         });
       }
@@ -483,12 +538,26 @@ function generateBrazilianUrls(title, episode) {
     'https://animeshouse.net/episodio/' + slug + '-episodio-' + epNum + '/',
     'https://animeshouse.net/episodio/' + slug + '-ep-' + epNum + '/',
     'https://animeshouse.net/' + slug + '-episodio-' + epNum + '/',
+    'https://animeshouse.net/episodio/' + slug + '-episode-' + epNum + '/',
   ];
 
   // AnimeQ
   sites.animeq = [
     'https://animeq.blog/' + slug + '-episodio-' + epNum + '/',
     'https://animeq.blog/assistir/' + slug + '-ep-' + epNum + '/',
+  ];
+
+  // AnimesOnline.cc
+  sites.animesonline = [
+    'https://animesonline.cc/episodio/' + slug + '-episodio-' + epNum + '/',
+    'https://animesonline.cc/episodio/' + slug + '-ep-' + epNum + '/',
+    'https://animesonline.cc/' + slug + '-episodio-' + epNum + '/',
+  ];
+
+  // SuperAnimes
+  sites.superanimes = [
+    'https://superanimes.biz/anime/' + slug + '/' + epNum,
+    'https://superanimes.biz/' + slug + '-episodio-' + epNum,
   ];
 
   return sites;
@@ -716,6 +785,8 @@ function handleTestSites(res) {
     'https://goyabu.to',
     'https://animeshouse.net',
     'https://animeq.blog',
+    'https://animesonline.cc',
+    'https://superanimes.biz',
     'https://animesonlinecc.to',
     'https://atv2.net',
   ];
@@ -883,7 +954,7 @@ var server = http.createServer(function(req, res) {
     var status = {
       server: 'running', version: '2.0', timestamp: new Date().toISOString(),
       consumet: { loaded: !!consumetProviders, attempted: consumetLoadAttempted, providers: consumetProviders ? consumetProviders.map(function(p) { return p.name; }) : [] },
-      video_providers: ['animetv', 'consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonlinecc'],
+      video_providers: ['animetv', 'consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonline', 'superanimes', 'animesonlinecc'],
       endpoints: ['/api/status', '/api/test-sites', '/api/debug-video/{title}/{ep}', '/api/episode/{slug}/{ep}?title=', '/api/atv-video/{id}', '/api/atv/*']
     };
     sendJSON(res, 200, status);
@@ -1009,7 +1080,7 @@ var server = http.createServer(function(req, res) {
               sendJSON(res, 200, { error: false, data: result });
             } else {
               sendJSON(res, 404, { error: true, message: 'Episodio nao encontrado em nenhum provedor',
-                providers_tried: ['animetv', 'consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonlinecc'] });
+                providers_tried: ['animetv', 'consumet', 'animefire', 'betteranime', 'goyabu', 'animeshouse', 'animeq', 'animesonline', 'superanimes', 'animesonlinecc'] });
             }
           });
         });
