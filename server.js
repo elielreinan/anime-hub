@@ -179,38 +179,46 @@ function handleATVVideoDecrypt(videoId, res) {
         return;
       }
 
+      console.log('[ATV-Video] Raw data:', JSON.stringify(data).substring(0, 500));
+
       // New API format: plain URL fields (locationhd > locationsd > location)
-      var videoUrl = data.locationhd || data.locationsd || data.location || null;
+      // Check with explicit length check since empty strings are falsy
+      var videoUrl = null;
+      if (data.locationhd && data.locationhd.length > 5) videoUrl = data.locationhd;
+      else if (data.locationsd && data.locationsd.length > 5) videoUrl = data.locationsd;
+      else if (data.location && data.location.length > 5) videoUrl = data.location;
+
       if (videoUrl) {
         console.log('[ATV-Video] Found direct URL:', videoUrl.substring(0, 80) + '...');
         sendJSON(res, 200, { error: false, video_url: videoUrl, provider: 'animetv' });
         return;
       }
 
-      // Legacy: try encrypted field
-      var encField = data.mS9wR2qY7pK7vX5n || null;
-      if (!encField) {
-        var keys = Object.keys(data);
-        for (var i = 0; i < keys.length; i++) {
-          var val = data[keys[i]];
-          if (typeof val === 'string' && val.length > 100 && /^[A-Za-z0-9+/=]+$/.test(val.substring(36, 100))) {
-            encField = val;
-            break;
+      // Legacy: try encrypted field or any long base64-like field
+      var encField = null;
+      var keys = Object.keys(data);
+      for (var i = 0; i < keys.length; i++) {
+        var val = data[keys[i]];
+        if (typeof val === 'string' && val.length > 100) {
+          encField = val;
+          console.log('[ATV-Video] Trying to decrypt field:', keys[i], '(length:', val.length, ')');
+          var decrypted = decryptATVVideo(val);
+          if (decrypted) {
+            console.log('[ATV-Video] Decrypted URL:', decrypted.substring(0, 80) + '...');
+            sendJSON(res, 200, { error: false, video_url: decrypted, provider: 'animetv' });
+            return;
           }
         }
       }
 
-      if (encField) {
-        var decrypted = decryptATVVideo(encField);
-        if (decrypted) {
-          console.log('[ATV-Video] Decrypted URL:', decrypted.substring(0, 80) + '...');
-          sendJSON(res, 200, { error: false, video_url: decrypted, provider: 'animetv' });
-          return;
-        }
-      }
-
-      console.log('[ATV-Video] No video URL found. Fields:', Object.keys(data).join(', '));
-      sendJSON(res, 404, { error: true, message: 'No video URL in response', fields: Object.keys(data) });
+      // Return debug info so we can see what the API gives us
+      var fieldValues = {};
+      keys.forEach(function(k) {
+        var v = data[k];
+        fieldValues[k] = typeof v === 'string' ? (v.length > 50 ? v.substring(0, 50) + '...' : v) : v;
+      });
+      console.log('[ATV-Video] No video URL found. Field values:', JSON.stringify(fieldValues));
+      sendJSON(res, 404, { error: true, message: 'No video URL in response', debug: fieldValues });
     } catch (err) {
       console.error('[ATV-Video] Parse error:', err.message);
       sendJSON(res, 500, { error: true, message: 'Failed to parse video response' });
