@@ -1,110 +1,141 @@
-// Video source diagnostics, run from a datacenter IP (GitHub Actions) to mirror Render.
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0';
-const AA_REFERER = 'https://allmanga.to';
-const AA_API = 'https://api.allanime.day/api';
-const AA_BASE = 'https://allanime.day';
+// Probe anime video sources from a datacenter IP (GitHub Actions) to find ones usable from Render.
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
-const SEARCH_GQL = 'query($search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType) { shows(search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin) { edges { _id name englishName availableEpisodes __typename } } }';
-const EPISODE_GQL = 'query ($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) { episode(showId: $showId translationType: $translationType episodeString: $episodeString) { episodeString sourceUrls } }';
+function cut(s, n) { s = String(s || '').replace(/\s+/g, ' '); return s.length > n ? s.slice(0, n) + '…' : s; }
 
-function cut(s, n) { s = String(s); return s.length > n ? s.slice(0, n) + '…(' + s.length + ')' : s; }
-
-async function get(url, headers, opts) {
+async function get(url, opts) {
+  opts = opts || {};
   const t = Date.now();
   try {
-    const r = await fetch(url, Object.assign({ headers: Object.assign({ 'User-Agent': UA }, headers || {}), signal: AbortSignal.timeout(20000) }, opts || {}));
-    const text = opts && opts.noBody ? '' : await r.text();
-    return { status: r.status, ct: r.headers.get('content-type'), text, ms: Date.now() - t };
+    const r = await fetch(url, {
+      method: opts.method || 'GET',
+      body: opts.body,
+      redirect: 'follow',
+      headers: Object.assign({ 'User-Agent': UA, 'Accept': '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8' }, opts.headers || {}),
+      signal: AbortSignal.timeout(opts.timeout || 12000)
+    });
+    const text = opts.noBody ? '' : await r.text();
+    const blocked = r.headers.get('cf-mitigated') || (/Just a moment|cf-chl|challenge-platform|ddos-guard|DDoS-Guard/i.test(text) ? 'challenge' : '');
+    return { url: r.url, status: r.status, ct: r.headers.get('content-type') || '', server: r.headers.get('server') || '', blocked, text, ms: Date.now() - t };
   } catch (e) {
-    return { status: 0, error: e.message + (e.cause ? ' / ' + e.cause.message : ''), text: '', ms: Date.now() - t };
+    return { url, status: 0, error: (e.cause && (e.cause.code || e.cause.message)) || e.message, text: '', ms: Date.now() - t };
   }
 }
 
-function gqlUrl(variables, query) {
-  return AA_API + '?variables=' + encodeURIComponent(JSON.stringify(variables)) + '&query=' + encodeURIComponent(query);
+function line(label, r) {
+  const verdict = r.status === 0 ? 'DEAD ' : r.blocked ? 'BLOCK' : r.status >= 400 ? 'ERR  ' : 'OK   ';
+  const extra = r.status === 0 ? r.error : (r.server + ' ' + cut(r.ct, 30) + ' | ' + cut(r.text, 140));
+  console.log(verdict + ' ' + String(r.status).padEnd(3) + ' ' + label.padEnd(58) + ' ' + extra);
 }
 
-function decodeSourceUrl(s) {
-  if (!s || s.indexOf('--') !== 0) return s;
-  const hex = s.slice(2);
-  let out = '';
-  for (let i = 0; i < hex.length; i += 2) out += String.fromCharCode(parseInt(hex.substr(i, 2), 16) ^ 56);
-  return out;
+const PROBES = [
+  // controls
+  ['control jikan', 'https://api.jikan.moe/v4/anime?q=naruto&limit=1'],
+  ['control kitsu', 'https://kitsu.io/api/edge/anime?filter[text]=naruto&page[limit]=1'],
+  // international APIs / mirrors
+  ['allanime api', 'https://api.allanime.day/api?variables=%7B%7D&query=%7B__typename%7D'],
+  ['allanime.to', 'https://allanime.to/'],
+  ['allmanga.to', 'https://allmanga.to/'],
+  ['animepahe.ru api', 'https://animepahe.ru/api?m=search&q=naruto'],
+  ['animepahe.com api', 'https://animepahe.com/api?m=search&q=naruto'],
+  ['animepahe.org api', 'https://animepahe.org/api?m=search&q=naruto'],
+  ['anitaku.to', 'https://anitaku.to/search.html?keyword=naruto'],
+  ['anitaku.pe', 'https://anitaku.pe/search.html?keyword=naruto'],
+  ['anitaku.io', 'https://anitaku.io/search.html?keyword=naruto'],
+  ['gogoanime3.co', 'https://gogoanime3.co/search.html?keyword=naruto'],
+  ['gogoanime.by', 'https://gogoanime.by/?s=naruto'],
+  ['gogocdn ajax', 'https://ajax.gogocdn.net/ajax/load-list-episode?ep_start=0&ep_end=5&id=1'],
+  ['hianimez.to', 'https://hianimez.to/ajax/search/suggest?keyword=naruto'],
+  ['hianime.sx', 'https://hianime.sx/ajax/search/suggest?keyword=naruto'],
+  ['hianime.nz', 'https://hianime.nz/ajax/search/suggest?keyword=naruto'],
+  ['hianime.bz', 'https://hianime.bz/ajax/search/suggest?keyword=naruto'],
+  ['hianime.do', 'https://hianime.do/ajax/search/suggest?keyword=naruto'],
+  ['aniwatchtv.to', 'https://aniwatchtv.to/ajax/search/suggest?keyword=naruto'],
+  ['9animetv.to', 'https://9animetv.to/ajax/search/suggest?keyword=naruto'],
+  ['animekai.to', 'https://animekai.to/ajax/anime/search?keyword=naruto'],
+  ['animekai.bz', 'https://animekai.bz/ajax/anime/search?keyword=naruto'],
+  ['kaa.to', 'https://kaa.to/api/search?query=naruto'],
+  ['miruro.tv', 'https://www.miruro.tv/'],
+  ['anify api', 'https://api.anify.tv/search/anime/naruto'],
+  ['consumet public', 'https://api.consumet.org/anime/gogoanime/naruto'],
+  ['anime-sama.fr', 'https://anime-sama.fr/'],
+  ['anime-sama.org', 'https://anime-sama.org/'],
+  ['animeflv', 'https://www3.animeflv.net/browse?q=naruto'],
+  ['jkanime', 'https://jkanime.net/buscar/naruto/'],
+  // brazilian
+  ['anroll search api', 'https://api-search.anroll.net/data?q=naruto'],
+  ['anroll site', 'https://www.anroll.net/'],
+  ['anroll apiv3', 'https://apiv3-prd.anroll.net/animes/1/episodes?page=1&order=desc'],
+  ['animefire.plus', 'https://animefire.plus/pesquisar/naruto'],
+  ['animefire.io', 'https://animefire.io/pesquisar/naruto'],
+  ['animefire.net', 'https://animefire.net/pesquisar/naruto'],
+  ['animefire.vip', 'https://animefire.vip/pesquisar/naruto'],
+  ['goyabu.io', 'https://goyabu.io/?s=naruto'],
+  ['goyabu.com', 'https://goyabu.com/?s=naruto'],
+  ['animesdigital', 'https://animesdigital.org/?s=naruto'],
+  ['animes.vision', 'https://animes.vision/'],
+  ['anitube.vip', 'https://www.anitube.vip/?s=naruto'],
+  ['anitube.site', 'https://anitube.site/?s=naruto'],
+  ['animeyabu', 'https://animeyabu.net/?s=naruto'],
+  ['hinatasoul', 'https://www.hinatasoul.com/busca?q=naruto'],
+  ['topanimes', 'https://topanimes.net/?s=naruto'],
+  ['animesonlinecc.org', 'https://animesonlinecc.org/?s=naruto'],
+  ['animesonlinehd', 'https://animesonlinehd.vip/?s=naruto'],
+  ['animesonline.in', 'https://animesonline.in/?s=naruto'],
+  ['animesorion', 'https://animesorion.vip/?s=naruto'],
+  ['animesup', 'https://www.animesup.info/?s=naruto'],
+  ['q1n', 'https://q1n.net/?s=naruto'],
+  ['otakuanimes', 'https://otakuanimess.net/?s=naruto'],
+  ['animeshd', 'https://animeshd.to/?s=naruto'],
+  ['animes.net.br', 'https://animes.net.br/?s=naruto'],
+  ['animesbr.tv', 'https://animesbr.tv/?s=naruto'],
+  ['bakashi', 'https://bakashi.tv/?s=naruto'],
+  ['saikoanimes', 'https://saikoanimes.net/?s=naruto'],
+];
+
+async function anrollFlow() {
+  console.log('\n=== Anroll flow ===');
+  const s = await get('https://api-search.anroll.net/data?q=death%20note');
+  line('search death note', s);
+  let j; try { j = JSON.parse(s.text); } catch (e) { return; }
+  console.log('  raw:', cut(JSON.stringify(j), 600));
 }
 
-async function probeVideo(url, referer) {
-  const r = await get(url, { Referer: referer, Range: 'bytes=0-1023' });
-  const head = r.text ? cut(r.text.replace(/\s+/g, ' '), 120) : '';
-  console.log('      probe', r.status, r.ct || '', r.error || '', head.indexOf('#EXTM3U') !== -1 ? '[m3u8 OK]' : '');
-  return r.status >= 200 && r.status < 400;
+async function animefireFlow(base) {
+  console.log('\n=== AnimeFire flow on ' + base + ' ===');
+  line('video json death-note/1', await get(base + '/video/death-note/1', { headers: { Referer: base + '/animes/death-note/1', 'X-Requested-With': 'XMLHttpRequest' } }));
+  line('episode page', await get(base + '/animes/death-note/1'));
 }
 
-async function testAllAnime(query, episode, mode) {
-  console.log('\n=== AllAnime: "' + query + '" ep ' + episode + ' (' + mode + ') ===');
-  const s = await get(gqlUrl({ search: { allowAdult: false, allowUnknown: false, query }, limit: 10, page: 1, translationType: mode, countryOrigin: 'ALL' }, SEARCH_GQL), { Referer: AA_REFERER });
-  console.log('  search', s.status, s.ms + 'ms', s.error || '', cut(s.text, 600));
-  let data;
-  try { data = JSON.parse(s.text); } catch (e) { return; }
-  const edges = (data && data.data && data.data.shows && data.data.shows.edges) || [];
-  if (!edges.length) { console.log('  no shows'); return; }
-  edges.slice(0, 5).forEach(e => console.log('   -', e._id, '|', e.name, '|', e.englishName, '|', JSON.stringify(e.availableEpisodes)));
-  const show = edges[0];
-
-  const ep = await get(gqlUrl({ showId: show._id, translationType: mode, episodeString: String(episode) }, EPISODE_GQL), { Referer: AA_REFERER });
-  console.log('  episode', ep.status, ep.ms + 'ms', ep.error || '', cut(ep.text, 400));
-  let epData;
-  try { epData = JSON.parse(ep.text); } catch (e) { return; }
-  const sources = (epData && epData.data && epData.data.episode && epData.data.episode.sourceUrls) || [];
-  console.log('  sources:', sources.length);
-
-  for (const src of sources) {
-    const decoded = decodeSourceUrl(src.sourceUrl);
-    console.log('   * ' + src.sourceName + ' (prio ' + src.priority + ', type ' + src.type + '): ' + cut(decoded, 160));
-    if (decoded.indexOf('/') === 0) {
-      const path = decoded.replace('/clock?', '/clock.json?');
-      const l = await get(AA_BASE + path, { Referer: AA_REFERER });
-      console.log('     clock', l.status, l.ms + 'ms', l.error || '', cut(l.text, 500));
-      let lj;
-      try { lj = JSON.parse(l.text); } catch (e) { continue; }
-      for (const link of (lj.links || []).slice(0, 3)) {
-        console.log('     link', link.resolutionStr, link.hls ? 'HLS' : 'MP4', cut(link.link, 200), link.headers ? JSON.stringify(link.headers) : '');
-        let url = link.link;
-        const wix = url.match(/repackager\.wixmp\.com\/(.+?)\/,([^/]*),\/mp4\/file\.mp4\.urlset/);
-        if (wix) {
-          const q = wix[2].split(',').filter(Boolean)[0];
-          url = 'https://' + wix[1] + '/' + q + '/mp4/file.mp4';
-          console.log('      wix direct ->', url);
-        }
-        await probeVideo(url, (link.headers && link.headers.Referer) || AA_REFERER);
-      }
-    } else if (decoded.indexOf('http') === 0) {
-      await probeVideo(decoded, AA_REFERER);
-    }
-  }
-}
-
-async function testConsumet() {
-  console.log('\n=== Consumet providers ===');
-  let mod;
-  try { mod = await import('@consumet/extensions'); } catch (e) { console.log('  load failed', e.message); return; }
-  const ANIME = mod.ANIME;
-  console.log('  available:', Object.keys(ANIME).join(', '));
-  for (const name of ['AnimeKai', 'AnimePahe', 'AnimeUnity', 'AnimeSaturn', 'KickAssAnime']) {
-    if (!ANIME[name]) continue;
-    const t = Date.now();
-    try {
-      const r = await Promise.race([new ANIME[name]().search('Death Note'), new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 20s')), 20000))]);
-      console.log('  ' + name + ': ' + ((r && r.results) || []).length + ' results', (Date.now() - t) + 'ms', r && r.results && r.results[0] ? JSON.stringify(r.results[0]).slice(0, 150) : '');
-    } catch (e) {
-      console.log('  ' + name + ': ERROR', e.message);
-    }
+async function pageFlow(label, base, path) {
+  const r = await get(base + path);
+  line(label, r);
+  if (r.status === 200 && !r.blocked) {
+    const links = (r.text.match(/href=["'][^"']+["']/g) || []).filter(h => /naruto/i.test(h)).slice(0, 6);
+    console.log('    naruto links:', links.join(' '));
+    const iframes = (r.text.match(/<iframe[^>]+src=["'][^"']+/gi) || []).slice(0, 3);
+    if (iframes.length) console.log('    iframes:', iframes.join(' '));
   }
 }
 
 (async () => {
   console.log('Node', process.version);
-  await testAllAnime('Death Note', 1, 'sub');
-  await testAllAnime('Naruto Shippuden', 451, 'sub');
-  await testAllAnime('One Piece', 1100, 'sub');
-  await testConsumet();
+  console.log('\n=== Probe (' + PROBES.length + ' candidates) ===');
+  const results = await Promise.all(PROBES.map(p => get(p[1]).then(r => [p[0], r])));
+  results.forEach(([label, r]) => line(label, r));
+
+  const ok = results.filter(([, r]) => r.status >= 200 && r.status < 400 && !r.blocked).map(([l, r]) => l + ' -> ' + r.url);
+  console.log('\nREACHABLE (' + ok.length + '):\n  ' + ok.join('\n  '));
+
+  await anrollFlow();
+  for (const base of ['https://animefire.plus', 'https://animefire.io', 'https://animefire.net']) await animefireFlow(base);
+
+  console.log('\n=== Search result pages (naruto links) ===');
+  for (const [label, r] of results) {
+    if (label.indexOf('control') === 0) continue;
+    if (r.status === 200 && !r.blocked && /\?s=|search|busca|pesquisar/.test(PROBES.find(p => p[0] === label)[1])) {
+      const links = (r.text.match(/href=["'][^"']+["']/g) || []).filter(h => /naruto/i.test(h)).slice(0, 5);
+      console.log(label.padEnd(20), links.length ? links.join(' ') : '(no naruto links)', '| len', r.text.length);
+    }
+  }
 })();
