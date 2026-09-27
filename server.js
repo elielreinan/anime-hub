@@ -403,13 +403,33 @@ function resolveBlogger(url) {
   }).then(function(r) {
     var line = r.body.split('\n').filter(function(l) { return l.indexOf('"wrb.fr"') !== -1; })[0];
     if (!line) return null;
+    var payload = JSON.parse(line)[0][2];
     var urls = [];
     (function walk(x) {
       if (typeof x === 'string') { if (x.indexOf('googlevideo.com/videoplayback') !== -1) urls.push(x); }
       else if (Array.isArray(x)) x.forEach(walk);
-    })(JSON.parse(JSON.parse(line)[0][2]));
-    return urls.sort(function(a, b) { return itagRank(a) - itagRank(b); })[0] || null;
+    })(payload ? JSON.parse(payload) : null);
+    // A valid RPC answer with no streams means the video was taken down.
+    return { url: urls.sort(function(a, b) { return itagRank(a) - itagRank(b); })[0] || null };
   }).catch(function() { return null; });
+}
+
+// Check that a stream answers before offering it: HLS playlist (following one level of
+// variants) and its first segment, or the first bytes of an MP4.
+function verifyStream(kind, url, referer) {
+  var headers = referer ? { Referer: referer } : null;
+  function firstBytes(u) {
+    return fetchUrl(u, 3, 7000, Object.assign({ Range: 'bytes=0-1' }, headers || {})).then(function(r) { return r.status < 400; });
+  }
+  if (kind !== 'hls') return firstBytes(url).catch(function() { return false; });
+  return fetchUrl(url, 3, 7000, headers).then(function(r) {
+    var text = r.body.toString();
+    if (r.status >= 400 || text.indexOf('#EXTM3U') === -1) return false;
+    var entry = text.split('\n').map(function(l) { return l.trim(); }).filter(function(l) { return l && l[0] !== '#'; })[0];
+    if (!entry) return false;
+    var next = new URL(entry, url).toString();
+    return /#EXT-X-STREAM-INF/.test(text) ? verifyStream('hls', next, referer) : firstBytes(next);
+  }).catch(function() { return false; });
 }
 
 // Fetch an embed page and pull the stream out of its player setup.
@@ -436,9 +456,10 @@ function resolvePlayer(url, site) {
     });
   }
   if (host.indexOf('blogger.com') !== -1) {
-    return resolveBlogger(url).then(function(gv) {
-      if (gv) return { kind: 'mp4', url: gv, proxy: true, name: 'Blogger' + (itagRank(gv) === 0 ? ' 720p' : ''), rank: 2 };
-      return { kind: 'iframe', url: url, name: 'Blogger (externo)', rank: 6 };
+    return resolveBlogger(url).then(function(res) {
+      if (!res) return { kind: 'iframe', url: url, name: 'Blogger (externo)', rank: 6 };
+      if (!res.url) return null;
+      return { kind: 'mp4', url: res.url, proxy: true, name: 'Blogger' + (itagRank(res.url) === 0 ? ' 720p' : ''), rank: 2 };
     });
   }
   if (host.indexOf('filemoon') !== -1) {
@@ -447,7 +468,10 @@ function resolvePlayer(url, site) {
   return resolveGeneric(url, site).then(function(res) {
     if (!res) return null;
     if (res.media) {
-      return { kind: res.media.kind, url: res.media.url, referer: res.referer, name: host.split('.')[0] + (res.media.quality ? ' ' + res.media.quality : ''), rank: 0 };
+      return verifyStream(res.media.kind, res.media.url, res.referer).then(function(ok) {
+        if (!ok) return null;
+        return { kind: res.media.kind, url: res.media.url, referer: res.referer, name: host.split('.')[0] + (res.media.quality ? ' ' + res.media.quality : ''), rank: 0 };
+      });
     }
     // The source site's own pages (interstitials, donation walls) are not players.
     if (host === hostName(site.base)) return null;

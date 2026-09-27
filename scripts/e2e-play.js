@@ -76,6 +76,8 @@ async function partyCase(browser, title, ep) {
   const a = await browser.newPage({ viewport: { width: 1280, height: 720 } });
   await a.goto(APP, { waitUntil: 'load' });
   await a.evaluate(([title, ep]) => { currentAnime = { id: 1, category_name: title }; openPlayer(1, ep, 9999); }, [title, ep]);
+  await a.waitForFunction(() => document.querySelectorAll('.server-btn').length > 0, null, { timeout: 90000 }).catch(() => {});
+  await a.evaluate(() => { const i = playerEmbeds.findIndex(e => e.kind !== 'iframe'); if (i > 0) selectServer(i); });
   const playing = await a.waitForFunction(() => { const v = document.getElementById('player-video'); return v.style.display !== 'none' && v.currentTime > 1; }, null, { timeout: 120000 }).then(() => true, () => false);
   if (!playing) { console.log('\nparty: no own-player stream for ' + title); await a.close(); return false; }
   await a.evaluate(() => createParty());
