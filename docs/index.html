@@ -1648,10 +1648,13 @@
         var s = res.state;
         var ready = (currentAnime && String(currentAnime.id) === String(s.animeId)) ? Promise.resolve() :
           Promise.all([atvFetch('info=' + s.animeId), atvFetch('cat_id=' + s.animeId)]).then(function(r) {
-            currentAnime = (r[0] && r[0][0]) || { id: s.animeId, category_name: s.title };
+            currentAnime = (r[0] && r[0][0]) || { id: s.animeId };
             currentAnimeEpisodes = r[1] || [];
           }, function() {
-            currentAnime = { id: s.animeId, category_name: s.title };
+            currentAnime = { id: s.animeId };
+          }).then(function() {
+            // Same title as the host, so everyone resolves the same servers.
+            currentAnime.category_name = s.title;
           });
         return ready.then(function() {
           connectParty(code);
