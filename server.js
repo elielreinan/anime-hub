@@ -164,7 +164,7 @@ function decryptATVVideo(encryptedField) {
   }
 }
 
-// Handle /api/atv-video/:videoId - decrypt AnimeTV video URL
+// Handle /api/atv-video/:videoId - get AnimeTV video URL
 function handleATVVideoDecrypt(videoId, res) {
   var url = ATV_BASE + 'episodios=' + videoId;
   console.log('[ATV-Video] Fetching video data for ID:', videoId);
@@ -179,35 +179,38 @@ function handleATVVideoDecrypt(videoId, res) {
         return;
       }
 
-      // Try known field name first, then auto-detect encrypted field
+      // New API format: plain URL fields (locationhd > locationsd > location)
+      var videoUrl = data.locationhd || data.locationsd || data.location || null;
+      if (videoUrl) {
+        console.log('[ATV-Video] Found direct URL:', videoUrl.substring(0, 80) + '...');
+        sendJSON(res, 200, { error: false, video_url: videoUrl, provider: 'animetv' });
+        return;
+      }
+
+      // Legacy: try encrypted field
       var encField = data.mS9wR2qY7pK7vX5n || null;
       if (!encField) {
         var keys = Object.keys(data);
-        console.log('[ATV-Video] Available fields:', keys.join(', '));
         for (var i = 0; i < keys.length; i++) {
           var val = data[keys[i]];
           if (typeof val === 'string' && val.length > 100 && /^[A-Za-z0-9+/=]+$/.test(val.substring(36, 100))) {
             encField = val;
-            console.log('[ATV-Video] Auto-detected encrypted field:', keys[i]);
             break;
           }
         }
       }
 
-      if (!encField) {
-        console.log('[ATV-Video] No encrypted field found. Response keys:', Object.keys(data).join(', '));
-        sendJSON(res, 404, { error: true, message: 'Video field not found', fields: Object.keys(data) });
-        return;
+      if (encField) {
+        var decrypted = decryptATVVideo(encField);
+        if (decrypted) {
+          console.log('[ATV-Video] Decrypted URL:', decrypted.substring(0, 80) + '...');
+          sendJSON(res, 200, { error: false, video_url: decrypted, provider: 'animetv' });
+          return;
+        }
       }
 
-      var videoUrl = decryptATVVideo(encField);
-      if (!videoUrl) {
-        sendJSON(res, 500, { error: true, message: 'Failed to decrypt video URL' });
-        return;
-      }
-
-      console.log('[ATV-Video] Decrypted URL:', videoUrl.substring(0, 80) + '...');
-      sendJSON(res, 200, { error: false, video_url: videoUrl, provider: 'animetv' });
+      console.log('[ATV-Video] No video URL found. Fields:', Object.keys(data).join(', '));
+      sendJSON(res, 404, { error: true, message: 'No video URL in response', fields: Object.keys(data) });
     } catch (err) {
       console.error('[ATV-Video] Parse error:', err.message);
       sendJSON(res, 500, { error: true, message: 'Failed to parse video response' });
@@ -443,16 +446,16 @@ var server = http.createServer(function(req, res) {
         try {
           var raw = JSON.parse(result.body.toString());
           var data = Array.isArray(raw) ? raw[0] : raw;
-          var encField = data && data.mS9wR2qY7pK7vX5n;
-          if (!encField && data && typeof data === 'object') {
-            var ks = Object.keys(data);
-            for (var ki = 0; ki < ks.length; ki++) {
-              var v = data[ks[ki]];
-              if (typeof v === 'string' && v.length > 100 && /^[A-Za-z0-9+/=]+$/.test(v.substring(36, 100))) {
-                encField = v; break;
-              }
-            }
+          // New API: direct URL fields
+          var directUrl = data && (data.locationhd || data.locationsd || data.location);
+          if (directUrl) {
+            return {
+              provider: 'animetv', slug: slug, episode: episode,
+              video_url: directUrl, type: 'direct'
+            };
           }
+          // Legacy: encrypted field
+          var encField = data && data.mS9wR2qY7pK7vX5n;
           if (encField) {
             var videoUrl = decryptATVVideo(encField);
             if (videoUrl) {
