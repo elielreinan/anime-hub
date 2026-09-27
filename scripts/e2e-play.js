@@ -150,7 +150,7 @@ async function discoverCase(browser) {
   const errs = [];
   page.on('console', m => { if (m.type() === 'error') errs.push(m.text().slice(0, 120)); });
   await openApp(page, APP);
-  await page.evaluate(() => { localStorage.removeItem('ah_calendar2'); switchTab('calendar'); });
+  await page.evaluate(() => { localStorage.removeItem('ah_airing'); switchTab('calendar'); });
   const week = await page.waitForFunction(() => document.querySelectorAll('#cal-list .cal-item').length > 0, null, { timeout: 90000 }).then(() => true, () => false);
   const weekCount = await page.evaluate(() => (calendarItems || []).length);
   await page.evaluate(() => switchCalendarView('now'));

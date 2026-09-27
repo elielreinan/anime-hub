@@ -1,57 +1,35 @@
 // ── Release calendar (Jikan / MyAnimeList) ──
 // Broadcast times are in Japan time; shows are regrouped by the viewer's own weekday.
-// Jikan's filter takes singular day names (the broadcast.day it returns is plural).
-var CAL_API_DAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+// Broadcast day names as Jikan writes them ("Mondays"), indexed like Date.getDay().
+var CAL_DAY_NAMES = ['sundays', 'mondays', 'tuesdays', 'wednesdays', 'thursdays', 'fridays', 'saturdays'];
 var CAL_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-var CAL_TTL = 12 * 60 * 60 * 1000;
 var calendarItems = null, calendarLoading = null, calendarDay = new Date().getDay();
-
-// Goes through jikanGet (discover.js): one shared, rate-limited queue for all Jikan calls.
-function jikanPage(day, page) {
-  return jikanGet('/schedules?filter=' + day + '&sfw=true&limit=25&page=' + page);
-}
 
 // Local weekday and "HH:MM" for a JST weekday + time.
 function jstToLocal(jstDay, time) {
   var hm = String(time || '').split(':');
   if (hm.length < 2) return null;
-  var now = new Date();
-  var base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  var jstToday = new Date(now.getTime() + 9 * 3600000).getUTCDay();
-  base.setUTCDate(base.getUTCDate() + ((jstDay - jstToday + 7) % 7));
-  var d = new Date(base.getTime() + (+hm[0] * 60 + +hm[1]) * 60000 - 9 * 3600000);
+  // Work on Japan's calendar date (UTC+9, no DST): its midnight on the next jstDay,
+  // plus the broadcast time, minus 9h is the real instant.
+  var jstNow = new Date(Date.now() + 9 * 3600000);
+  var base = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) + ((jstDay - jstNow.getUTCDay() + 7) % 7) * 86400000;
+  var d = new Date(base + (+hm[0] * 60 + +hm[1]) * 60000 - 9 * 3600000);
   return { day: d.getDay(), time: ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) };
 }
 
-// Days are fetched one after another; a failed page is skipped instead of losing
-// the whole week, and what already arrived is shown while the rest loads.
-function fetchCalendar(onProgress) {
-  var cached = getStore('calendar2');
-  if (cached.at && Date.now() - cached.at < CAL_TTL && cached.items && cached.items.length) return Promise.resolve(cached.items);
-  var items = [], seen = {}, failures = 0, done = 0;
-  var chain = Promise.resolve();
-  CAL_API_DAYS.forEach(function(day, jstDay) {
-    [1, 2, 3].forEach(function(page) {
-      chain = chain.then(function(more) {
-        if (page > 1 && !more) return false;
-        return jikanPage(day, page).then(function(json) {
-          (json.data || []).forEach(function(a) {
-            if (seen[a.mal_id]) return;
-            var when = jstToLocal(jstDay, a.broadcast && a.broadcast.time);
-            if (!when) return;
-            seen[a.mal_id] = true;
-            items.push({ title: a.title, en: a.title_english || '', img: (a.images && (a.images.webp || a.images.jpg) || {}).image_url || '',
-              day: when.day, time: when.time, eps: a.episodes || 0, score: a.score || 0 });
-          });
-          return !!(json.pagination && json.pagination.has_next_page);
-        }, function() { failures++; return false; });
-      });
+// The week is built from everything airing now (discover.js), using each show's
+// broadcast day and time in Japan, converted to the viewer's time zone.
+function fetchCalendar() {
+  return getAiringShows().then(function(shows) {
+    var items = [];
+    shows.forEach(function(c) {
+      var jstDay = CAL_DAY_NAMES.indexOf(String(c.bday).toLowerCase());
+      if (jstDay === -1) return;
+      var when = jstToLocal(jstDay, c.btime);
+      if (!when) return;
+      items.push({ title: c.title, en: c.en, img: c.img, day: when.day, time: when.time, eps: c.eps, score: c.score });
     });
-    chain = chain.then(function() { done++; if (onProgress) onProgress(items, done); });
-  });
-  return chain.then(function() {
     if (!items.length) throw new Error('empty');
-    if (!failures) setStore('calendar2', { at: Date.now(), items: items });
     return items;
   });
 }
@@ -61,11 +39,7 @@ function loadCalendar() {
   if (calendarItems) { renderCalendar(); return; }
   document.getElementById('cal-list').innerHTML = '<div class="empty-state">Carregando lançamentos...</div>';
   if (!calendarLoading) {
-    calendarLoading = fetchCalendar(function(partial, days) {
-      calendarItems = partial.slice();
-      renderCalendar();
-      if (days < 7) document.getElementById('cal-list').insertAdjacentHTML('beforeend', '<div class="empty-state">Carregando o resto da semana (' + days + '/7)...</div>');
-    }).then(function(items) {
+    calendarLoading = fetchCalendar().then(function(items) {
       calendarItems = items;
       renderCalendar();
     }).catch(function() {

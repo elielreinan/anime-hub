@@ -3,17 +3,61 @@
 // of those looks the title up in our catalog, which is what actually plays.
 
 var jikanQueue = Promise.resolve();
-// Jikan allows ~3 requests/second: calls are spaced out and retried on 429.
+// Jikan allows ~3 requests/second: calls are spaced out, each has a 15s timeout, and
+// 429/5xx answers are retried twice. A stuck call can't hold the queue forever.
 function jikanGet(path) {
   var p = jikanQueue.then(function() { return new Promise(function(r) { setTimeout(r, 380); }); }).then(function attempt(tries) {
-    return fetch('https://api.jikan.moe/v4' + path).then(function(r) {
-      if (r.status === 429 && (tries || 0) < 3) return new Promise(function(res) { setTimeout(res, 1200); }).then(function() { return attempt((tries || 0) + 1); });
+    tries = tries || 0;
+    var ctrl = window.AbortController ? new AbortController() : null;
+    var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, 15000);
+    return fetch('https://api.jikan.moe/v4' + path, ctrl ? { signal: ctrl.signal } : undefined).then(function(r) {
+      clearTimeout(timer);
+      if ((r.status === 429 || r.status >= 500) && tries < 2) return new Promise(function(res) { setTimeout(res, 1500); }).then(function() { return attempt(tries + 1); });
       if (!r.ok) throw new Error('HTTP ' + r.status);
       return r.json();
+    }, function(err) {
+      clearTimeout(timer);
+      if (tries < 1) return attempt(tries + 1);
+      throw err;
     });
   });
   jikanQueue = p.catch(function() {});
   return p;
+}
+
+// Everything airing now: this season plus long-running shows still on air (One Piece...).
+// Both come with their broadcast day/time, which the week agenda is built from.
+var AIRING_TTL = 6 * 60 * 60 * 1000;
+var airingPromise = null;
+function getAiringShows() {
+  var cached = getStore('airing');
+  if (cached.at && Date.now() - cached.at < AIRING_TTL && cached.items && cached.items.length) return Promise.resolve(cached.items);
+  if (airingPromise) return airingPromise;
+  var items = [], seen = {};
+  var add = function(j) {
+    (j.data || []).forEach(function(a) {
+      if (seen[a.mal_id]) return;
+      seen[a.mal_id] = true;
+      var c = jikanCard(a);
+      c.bday = a.broadcast && a.broadcast.day || '';
+      c.btime = a.broadcast && a.broadcast.time || '';
+      items.push(c);
+    });
+    return !!(j.pagination && j.pagination.has_next_page);
+  };
+  var pages = ['/seasons/now?sfw=true&page=1', '/seasons/now?sfw=true&page=2', '/seasons/now?sfw=true&page=3', '/top/anime?filter=airing&sfw=true&page=1', '/top/anime?filter=airing&sfw=true&page=2'];
+  airingPromise = pages.reduce(function(p, path) {
+    return p.then(function(more) {
+      if (more === false && /seasons\/now.*page=[23]/.test(path)) return false;
+      return jikanGet(path).then(add, function() { return !/seasons/.test(path); });
+    });
+  }, Promise.resolve(true)).then(function() {
+    airingPromise = null;
+    if (!items.length) throw new Error('empty');
+    setStore('airing', { at: Date.now(), items: items });
+    return items;
+  }, function(e) { airingPromise = null; throw e; });
+  return airingPromise;
 }
 
 function jikanCard(a) {
