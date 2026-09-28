@@ -1,4 +1,12 @@
 // ── Navigation ──
+// Logo: close whatever is open on top and go back to the home screen.
+function goHome() {
+  if (document.getElementById('detail-page').classList.contains('show')) closeDetail();
+  document.querySelectorAll('.sheet.show').forEach(function(s) { s.classList.remove('show'); });
+  if (partySheetOpen()) closePartySheet();
+  switchTab('home');
+}
+
 function switchTab(name) {
   document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
   document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });

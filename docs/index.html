@@ -24,7 +24,7 @@
 <body>
 
   <header class="header">
-    <h1 class="logo"><span class="logo-accent">ANIME</span>HUB<em class="beta-badge" onclick="showBetaNotice()" title="Versão de testes">BETA</em></h1>
+    <h1 class="logo"><a href="./" onclick="goHome(); return false;" aria-label="Ir para o início"><span class="logo-accent">ANIME</span>HUB</a><em class="beta-badge" onclick="showBetaNotice()" title="Versão de testes">BETA</em></h1>
     <div class="header-actions">
       <button class="header-btn header-party" id="header-party-btn" aria-label="Assistir junto" onclick="openPartySheet()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span id="header-party-label">Juntos</span></button>
       <button class="header-btn" aria-label="Notificações" onclick="openNotifications()"><span class="badge-dot" id="notif-dot"></span>
@@ -167,7 +167,7 @@
       <span class="menu-text">Levar meus dados para outro aparelho</span>
       <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
     </div>
-    <a class="menu-item" id="android-app-item" style="display:none;color:inherit;text-decoration:none" href="https://github.com/elielreinan/anime-hub/releases/download/android/AnimeHub.apk">
+    <a class="menu-item" id="android-app-item" style="display:none;color:inherit;text-decoration:none" href="https://anime-hub-zz7f.onrender.com/download/android" target="_blank" rel="noopener" download="AnimeHub.apk" onclick="showToast('Baixando o app... depois toque no arquivo para instalar')">
       <span class="menu-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg></span>
       <span class="menu-text">Baixar app Android</span>
       <span class="chevron"><svg class="chevron-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></span>
