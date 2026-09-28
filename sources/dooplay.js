@@ -327,6 +327,7 @@ function findEpisodeEmbeds(title, episode, lang) {
   var promise = Promise.all(DOOPLAY_SITES.map(function(site) {
     var trace = traces[site.name] = [];
     return getAnimeVersions(site, title, trace).then(function(versions) {
+      markSource(site, true);
       return Promise.all(versions.map(function(v) {
         var epUrl = v.episodes[epNum];
         var tag = v.dub ? 'dub' : 'sub';
@@ -347,7 +348,7 @@ function findEpisodeEmbeds(title, episode, lang) {
       }));
     }).then(function(lists) {
       return [].concat.apply([], lists);
-    }).catch(function(err) { trace.push('error: ' + err.message); return []; });
+    }).catch(function(err) { trace.push('error: ' + err.message); markSource(site, false, err.message); return []; });
   })).then(function(lists) {
     var embeds = [].concat.apply([], lists).sort(function(a, b) { return a.rank - b.rank; });
     var result = { embeds: embeds, trace: traces };
@@ -360,6 +361,20 @@ function findEpisodeEmbeds(title, episode, lang) {
   });
   playerCache[key] = { pending: true, promise: promise };
   return promise;
+}
+
+// Last time each source site answered (or failed), for the public status page.
+var sourceStatus = {};
+function markSource(site, ok, error) {
+  var s = sourceStatus[site.name] = sourceStatus[site.name] || { name: site.name };
+  if (ok) s.lastOk = Date.now(); else { s.lastFail = Date.now(); s.error = String(error || '').slice(0, 120); }
+}
+function getSourceStatus() {
+  return DOOPLAY_SITES.map(function(site) {
+    var s = sourceStatus[site.name] || {};
+    var ok = s.lastOk && (!s.lastFail || s.lastOk > s.lastFail);
+    return { name: site.name, state: !s.lastOk && !s.lastFail ? 'unknown' : ok ? 'ok' : 'down', lastOk: s.lastOk || null, lastFail: s.lastFail || null };
+  });
 }
 
 function slugify(title) {
@@ -377,5 +392,6 @@ module.exports = {
   findEpisodeEmbeds: findEpisodeEmbeds,
   slugify: slugify,
   hostName: hostName,
+  getSourceStatus: getSourceStatus,
   clearCaches: function() { playerCache = {}; episodeListCache = {}; }
 };

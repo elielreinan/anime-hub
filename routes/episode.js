@@ -20,7 +20,10 @@ function handleEpisode(req, res, pathname, urlObj) {
       var host = health.hostOf(e.url);
       return { kind: e.kind, url: e.url, label: e.label, provider: e.provider, referer: e.referer, proxy: e.proxy, host: host, unstable: health.isUnstable(host), order: i };
     });
-    embeds.sort(function(a, b) { return (a.unstable - b.unstable) || (a.order - b.order); });
+    // The host that has been playing this show for other viewers goes first.
+    var best = health.bestHost(title);
+    embeds.forEach(function(e) { e.best = !!best && e.host === best.host && !e.unstable; });
+    embeds.sort(function(a, b) { return (a.unstable - b.unstable) || (b.best - a.best) || (a.order - b.order); });
     sendJSON(res, 200, { error: false, data: { type: 'embed', provider: embeds[0].provider, embed_url: embeds[0].url, embeds: embeds }, trace: result.trace });
   }).catch(function(err) {
     console.error('[Episode] Error:', err.message);

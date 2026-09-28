@@ -374,6 +374,7 @@ function renderAccount() {
   av.innerHTML = account ? avatarHtml(account.user.avatar, 88) : '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
   av.classList.toggle('has-avatar', !!account);
   refreshLevel();
+  loadMyLists();
   renderProfileName();
   if (document.getElementById('settings-sheet').classList.contains('show')) renderSettings();
   if (party && partySheetOpen()) renderPartyFriends();
@@ -459,6 +460,7 @@ function renderPublicProfile(p) {
   if (account && !p.isMe) html += '<button class="party-btn ghost" onclick="reportContent(\'user\',\'' + id + '\')">Denunciar</button>';
   html += '</div>';
   if (p.clan) html += '<div class="clan-card" onclick="openClan(\'' + safeId(p.clan.publicId) + '\')">' + clanBadge(p.clan, 40) + '<div class="clan-info"><div class="clan-name">' + escapeHtml(p.clan.name) + '</div><div class="clan-desc">' + escapeHtml(roleName(p.clan.role)) + '</div></div></div>';
+  if (!p.private) html += '<div id="pp-lists"></div>';
   if (p.private) {
     html += '<div class="empty-state">Este perfil é privado.</div>';
   } else {
@@ -487,6 +489,7 @@ function renderPublicProfile(p) {
     if (!any && !p.watching) html += '<div class="empty-state">Nenhum anime nas listas ainda.</div>';
   }
   document.getElementById('detail-body').innerHTML = html + '<div style="height:40px"></div>';
+  if (!p.private) loadUserLists(id, 'pp-lists');
 }
 
 // ── "Watching now" for friends ──
@@ -530,14 +533,59 @@ function renderPartyFriends() {
   }).catch(function() {});
 }
 
-var inboxTimer = null;
+var inboxTimer = null, friendWatchTimer = null;
 function startInboxPolling() {
   stopInboxPolling();
   if (!account) return;
   checkInbox();
   inboxTimer = setInterval(function() { if (!document.hidden) checkInbox(); }, 20000);
+  checkFriendsWatching();
+  friendWatchTimer = setInterval(function() { if (!document.hidden) checkFriendsWatching(); }, 60000);
 }
-function stopInboxPolling() { clearInterval(inboxTimer); inboxTimer = null; }
+
+// "Ana começou a assistir Frieren — assistir junto?" Each friend/show pair is announced
+// once per session; the first check only records what everyone is already watching.
+var friendWatchSeen = null;
+function checkFriendsWatching() {
+  if (!account) return;
+  loadFriends().then(function(list) {
+    var first = !friendWatchSeen;
+    friendWatchSeen = friendWatchSeen || {};
+    list.forEach(function(f) {
+      if (!f.watching) return;
+      var key = f.publicId + ':' + f.watching.animeId;
+      if (friendWatchSeen[key]) return;
+      friendWatchSeen[key] = true;
+      if (!first && !playerIsOpen()) showFriendWatching(f);
+    });
+  }).catch(function() {});
+}
+
+function showFriendWatching(f) {
+  var el = document.getElementById('invite-banner');
+  if (el.classList.contains('show')) return;
+  el.innerHTML = '<div class="friend-live">' + avatarHtml(f.avatar, 36) + '<div><b></b> começou a assistir <b></b>. Assistir junto?</div></div>' +
+    '<div class="party-row"><button class="party-btn" style="flex:1" id="fw-join">Assistir junto</button><button class="party-btn ghost" id="fw-open">Só abrir</button><button class="party-btn ghost" onclick="document.getElementById(\'invite-banner\').classList.remove(\'show\')">✕</button></div>';
+  var b = el.querySelectorAll('.friend-live b');
+  b[0].textContent = f.name;
+  b[1].textContent = f.watching.title + (f.watching.ep ? ' (Ep ' + f.watching.ep + ')' : '');
+  document.getElementById('fw-open').onclick = function() { el.classList.remove('show'); openDetail(safeId(f.watching.animeId)); };
+  // Opens a room on the same episode and calls the friend into it.
+  document.getElementById('fw-join').onclick = function() {
+    el.classList.remove('show');
+    var w = f.watching;
+    partyApi('', { animeId: safeId(w.animeId), title: w.title, cover: w.cover, ep: w.ep || 1, time: 0, playing: false }).then(function(res) {
+      connectParty(res.code);
+      inviteFriend(f.publicId);
+      openRemoteEpisode({ animeId: safeId(w.animeId), title: w.title, cover: w.cover, ep: w.ep || 1 }, { time: 0, playing: true });
+    }).catch(function() { showToast('Não foi possível criar a sala'); });
+  };
+  el.classList.add('show');
+  if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+    try { new Notification(f.name + ' está assistindo ' + f.watching.title, { body: 'Abra o AnimeHub para assistir junto', icon: 'icon-192.png' }); } catch (e) {}
+  }
+}
+function stopInboxPolling() { clearInterval(inboxTimer); clearInterval(friendWatchTimer); inboxTimer = friendWatchTimer = null; friendWatchSeen = null; }
 
 var pendingInvites = [];
 function checkInbox() {
@@ -573,8 +621,7 @@ function acceptInvite() {
 }
 function dismissInvite() { pendingInvites.shift(); showNextInvite(); }
 
-renderAccount();
-if (account) { pullAccount(); startInboxPolling(); }
+// renderAccount() and the first pull run from app.js, once every script is loaded.
 document.addEventListener('visibilitychange', function() {
   if (!document.hidden && account) { pullAccount(); checkInbox(); }
   if (document.hidden && syncDirty) pushAccountData();

@@ -11,7 +11,7 @@ var AUTO_HIDE_REPORTS = 3;
 
 function postOut(p, viewer) {
   return {
-    id: +p.id, text: p.text, animeId: p.anime_id, animeTitle: p.anime_title, at: p.created_at,
+    id: +p.id, text: p.text, spoiler: !!p.spoiler, animeId: p.anime_id, animeTitle: p.anime_title, at: p.created_at,
     author: shared.card(p), clan: p.clan_public_id ? { publicId: p.clan_public_id, name: p.clan_name, emoji: p.clan_emoji } : null,
     likes: +p.likes || 0, comments: +p.comments || 0, liked: !!p.liked,
     canDelete: !!viewer && (viewer.id === +p.user_id || viewer.role === 'admin' || !!p.viewer_clan_mod)
@@ -69,7 +69,7 @@ function register(add) {
       if (!m) v.fail(400, 'Você não está em um clã');
       clanId = m.clan_id;
     }
-    var p = (await db.query('INSERT INTO posts (user_id, clan_id, text, anime_id, anime_title) VALUES ($1, $2, $3, $4, $5) RETURNING id', [ctx.user.id, clanId, text, animeId, animeTitle])).rows[0];
+    var p = (await db.query('INSERT INTO posts (user_id, clan_id, text, anime_id, anime_title, spoiler) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id', [ctx.user.id, clanId, text, animeId, animeTitle, b.spoiler === true])).rows[0];
     xp.refresh(ctx.user.id).catch(function() {});
     var full = (await db.query(POST_SELECT + ' WHERE p.id = $2', [ctx.user.id, p.id])).rows[0];
     return { post: postOut(full, ctx.user) };
@@ -95,15 +95,15 @@ function register(add) {
     var p = await visiblePost(ctx.params.id);
     var r = await db.query('SELECT k.*, u.public_id, u.name, u.avatar, u.xp FROM comments k JOIN users u ON u.id = k.user_id WHERE k.post_id = $1 AND NOT k.hidden AND u.banned_at IS NULL ORDER BY k.id LIMIT 200', [p.id]);
     return { comments: r.rows.map(function(k) {
-      return { id: +k.id, text: k.text, at: k.created_at, author: shared.card(k), canDelete: !!ctx.user && (ctx.user.id === +k.user_id || ctx.user.role === 'admin' || ctx.user.id === +p.user_id) };
+      return { id: +k.id, text: k.text, spoiler: !!k.spoiler, at: k.created_at, author: shared.card(k), canDelete: !!ctx.user && (ctx.user.id === +k.user_id || ctx.user.role === 'admin' || ctx.user.id === +p.user_id) };
     }) };
   });
 
   add('POST', '/api/community/posts/:id/comments', { auth: true, limit: 'comment' }, async function(ctx) {
     var p = await visiblePost(ctx.params.id);
     var text = v.text(ctx.body.text, 500, { multiline: true });
-    var k = (await db.query('INSERT INTO comments (post_id, user_id, text) VALUES ($1, $2, $3) RETURNING *', [p.id, ctx.user.id, text])).rows[0];
-    return { comment: { id: +k.id, text: k.text, at: k.created_at, author: shared.card(ctx.user), canDelete: true } };
+    var k = (await db.query('INSERT INTO comments (post_id, user_id, text, spoiler) VALUES ($1, $2, $3, $4) RETURNING *', [p.id, ctx.user.id, text, ctx.body.spoiler === true])).rows[0];
+    return { comment: { id: +k.id, text: k.text, spoiler: !!k.spoiler, at: k.created_at, author: shared.card(ctx.user), canDelete: true } };
   });
 
   add('DELETE', '/api/community/comments/:id', { auth: true }, async function(ctx) {

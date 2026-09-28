@@ -448,3 +448,77 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
   #party-btn:not(.active) #party-btn-label { display: none; }
   #party-btn { padding: 6px 8px; }
 }
+
+/* ── Player: episodes under the video when the phone is upright ── */
+.player-eps { display: none; }
+@media (orientation: portrait) and (max-width: 820px) {
+  .player-overlay.show { overflow: hidden; }
+  .player-overlay .player-body { flex: none; aspect-ratio: 16 / 9; width: 100%; }
+  .player-overlay.iframe-mode .player-body { aspect-ratio: 16 / 10; }
+  .player-eps { display: block; flex: 1; min-height: 0; overflow-y: auto; background: #0b0b10; border-top: 1px solid #1f1f2e; padding: 0 12px calc(12px + env(safe-area-inset-bottom)); }
+  .player-controls { padding-bottom: 10px; }
+}
+.player-eps-head { position: sticky; top: 0; background: #0b0b10; padding: 12px 2px 8px; font-weight: 800; font-size: 14px; }
+.player-eps-head span { color: var(--muted); font-weight: 600; }
+.player-ep { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: 1px solid transparent; border-radius: 10px; color: #d1d5db; padding: 10px; font-family: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.player-ep b { min-width: 34px; height: 34px; border-radius: 8px; background: #1a1a24; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.player-ep span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.player-ep.current { border-color: var(--accent); background: rgba(255,90,38,0.08); color: #fff; }
+.player-ep.current b { background: var(--accent); color: #fff; }
+.player-ep.watched { opacity: 0.55; }
+
+/* ── Spoilers ── */
+.spoiler { color: transparent !important; text-shadow: 0 0 9px rgba(229,231,235,0.75); cursor: pointer; user-select: none; position: relative; min-height: 22px; }
+.spoiler::after { content: '⚠ Spoiler · toque para ver'; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-shadow: none; font-size: 12px; font-weight: 800; color: #fff; background: rgba(13,13,18,0.35); border-radius: 8px; }
+.spoiler-check { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.spoiler-check input { accent-color: var(--accent); }
+.comment-box { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── Clans: weekly challenge, ranking period ── */
+.clan-week { margin: 0 16px 8px; }
+.week-tiers { display: flex; gap: 10px; margin-bottom: 8px; font-size: 12px; }
+.week-tiers span { opacity: 0.35; filter: grayscale(1); }
+.week-tiers span.on { opacity: 1; filter: none; font-weight: 800; }
+.rank-period { margin: 0 16px 10px; }
+
+/* ── Friend started watching ── */
+.friend-live { display: flex; align-items: center; gap: 10px; }
+
+/* ── Public lists ── */
+.section-header .mini { padding: 6px 12px; font-size: 12px; }
+.list-card { margin: 0 16px 10px; background: var(--card); border: 1px solid #2d2d3d; border-radius: 14px; padding: 10px; display: flex; gap: 12px; align-items: center; cursor: pointer; }
+.list-covers { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; width: 56px; height: 76px; border-radius: 8px; overflow: hidden; flex-shrink: 0; background: #22222e; }
+.list-covers img { width: 100%; height: 100%; object-fit: cover; }
+.list-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; max-height: 50vh; overflow-y: auto; }
+.list-pick-item { position: relative; display: flex; flex-direction: column; gap: 4px; font-size: 11px; cursor: pointer; }
+.list-pick-item img { width: 100%; aspect-ratio: 2 / 3; object-fit: cover; border-radius: 8px; background: #22222e; border: 2px solid transparent; }
+.list-pick-item input { position: absolute; top: 6px; left: 6px; width: 18px; height: 18px; accent-color: var(--accent); }
+.list-pick-item input:checked ~ img { border-color: var(--accent); }
+.list-pick-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list-desc { font-size: 14px; color: #d1d5db; white-space: pre-wrap; }
+
+/* ── Anime page extras, characters ── */
+.detail-extra { display: flex; flex-direction: column; gap: 10px; padding: 0 16px 8px; }
+.detail-extra .party-btn { align-self: flex-start; }
+.char-row { display: flex; gap: 12px; padding: 12px 16px; border-bottom: 1px solid rgba(26,26,36,0.8); }
+.char-row > img { width: 56px; height: 80px; object-fit: cover; border-radius: 8px; background: #22222e; flex-shrink: 0; }
+.char-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; font-size: 14px; }
+.char-info small { color: var(--muted); font-size: 11px; }
+.va { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #d1d5db; }
+.va img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+
+/* ── Text size ── */
+html[data-font="s"] body { zoom: 0.9; }
+html[data-font="l"] body { zoom: 1.12; }
+html[data-font="xl"] body { zoom: 1.25; }
+
+/* ── Light theme ──
+   The dark palette is inverted as a whole (hues kept by the 180° rotation), and
+   photos, video and emoji are inverted back so they look normal. */
+html[data-theme="light"] { filter: invert(0.93) hue-rotate(180deg); background: #0d0d12; }
+html[data-theme="light"] img, html[data-theme="light"] video, html[data-theme="light"] iframe,
+html[data-theme="light"] .av, html[data-theme="light"] .clan-emblem, html[data-theme="light"] .ach span,
+html[data-theme="light"] .reaction-float, html[data-theme="light"] .party-reactions button, html[data-theme="light"] .pick,
+html[data-theme="light"] .star, html[data-theme="light"] .star-input button, html[data-theme="light"] .hero-slide,
+html[data-theme="light"] .week-tiers span, html[data-theme="light"] .beta-modal > div:first-child { filter: invert(1) hue-rotate(180deg); }
+html[data-theme="light"] .ach:not(.on) span { filter: invert(1) hue-rotate(180deg) grayscale(1); }

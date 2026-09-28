@@ -105,6 +105,7 @@ function openPlayer(animeId, ep, totalEps) {
   setPlayerStatus('Procurando servidores...', true);
   partyEpisodeOpened(ep);
   if (party) { updatePartyUi(); renderPartyNow(); }
+  renderPlayerEpisodes();
   lastPresence = 0;
   reportWatching(true);
 
@@ -132,7 +133,7 @@ function renderServerButtons() {
   playerEmbeds.forEach(function(e, i) {
     var btn = document.createElement('button');
     btn.className = 'server-btn';
-    btn.textContent = (i + 1) + '. ' + e.label + (e.unstable ? ' · instável' : '');
+    btn.textContent = (e.best ? '⭐ ' : '') + (i + 1) + '. ' + e.label + (e.unstable ? ' · instável' : '');
     if (e.unstable) btn.classList.add('unstable');
     btn.onclick = function() { selectServer(i); };
     bar.appendChild(btn);
@@ -162,7 +163,7 @@ function reportServerHealth(ok) {
   var key = playerRequestId + ':' + playerServerIndex + ':' + (ok ? 1 : 0);
   if (healthReported[key]) return;
   healthReported[key] = true;
-  fetch(getApiBase() + '/api/health/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: e.host, ok: !!ok }) }).catch(function() {});
+  fetch(getApiBase() + '/api/health/report', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ host: e.host, ok: !!ok, anime: currentAnime ? getTitle(currentAnime) : '', label: e.label }) }).catch(function() {});
 }
 
 function streamFailed() {
@@ -510,3 +511,20 @@ document.addEventListener('keydown', function(e) {
   else if (e.key === 's' || e.key === 'S') skipOpening();
   else if (e.key === 'Escape') closePlayer();
 });
+
+// ── Episode list under the video (phones held upright) ──
+function renderPlayerEpisodes() {
+  var el = document.getElementById('player-eps');
+  if (!currentAnime || !currentAnimeEpisodes || !currentAnimeEpisodes.length || typeof detailEpisodes !== 'function') { el.innerHTML = ''; return; }
+  var eps = detailEpisodes();
+  var h = getWatchHistory().find(function(x) { return x.id == currentAnime.id; });
+  el.innerHTML = '<div class="player-eps-head">Episódios <span>' + eps.length + '</span></div>' + eps.map(function(ep) {
+    var watched = h && (h.episode > ep.num || (h.episode === ep.num && h.progress >= 90));
+    return '<button class="player-ep' + (ep.num === playerEpisode ? ' current' : '') + (watched ? ' watched' : '') + '" onclick="openPlayer(\'' + safeId(currentAnime.id) + '\',' + ep.num + ',' + eps.length + ')">' +
+      '<b>' + ep.num + '</b><span></span></button>';
+  }).join('');
+  var btns = el.querySelectorAll('.player-ep span');
+  eps.forEach(function(ep, i) { if (btns[i]) btns[i].textContent = ep.title && !/^epis[oó]dio\s*\d+$/i.test(ep.title) ? ep.title : 'Episódio ' + ep.num; });
+  var cur = el.querySelector('.player-ep.current');
+  if (cur) setTimeout(function() { cur.scrollIntoView({ block: 'center' }); }, 50);
+}

@@ -83,7 +83,7 @@ function renderComposer() {
   }
   el.innerHTML = '<div class="composer">' + avatarHtml(account.user.avatar, 36) +
     '<div style="flex:1;min-width:0"><textarea id="composer-text" maxlength="1000" rows="2" placeholder="O que você está assistindo?"></textarea>' +
-    '<div class="composer-row"><span class="party-muted" id="composer-anime"></span><button class="party-btn" id="composer-send" onclick="submitPost()">Publicar</button></div></div></div>';
+    '<div class="composer-row"><label class="spoiler-check"><input type="checkbox" id="composer-spoiler"> Contém spoiler</label><button class="party-btn" id="composer-send" onclick="submitPost()">Publicar</button></div></div></div>';
 }
 
 function loadFeed(more) {
@@ -112,7 +112,7 @@ function postHtml(p) {
     '<div class="post-head">' + userLine(p.author, timeAgo(p.at)) +
       '<button class="post-menu" onclick="postMenu(' + p.id + ',' + (p.canDelete ? 1 : 0) + ')" aria-label="Opções">⋯</button></div>' +
     (p.clan ? '<div class="post-clan">' + escapeHtml(p.clan.emoji + ' ' + p.clan.name) + '</div>' : '') +
-    '<div class="post-text"></div>' +
+    '<div class="post-text' + (p.spoiler ? ' spoiler' : '') + '"' + (p.spoiler ? ' onclick="revealSpoiler(this)" title="Toque para ver"' : '') + '></div>' +
     (p.animeTitle ? '<div class="post-anime" onclick="openDetail(\'' + safeId(p.animeId) + '\')">🎬 ' + escapeHtml(p.animeTitle) + '</div>' : '') +
     '<div class="post-actions">' +
       '<button class="' + (p.liked ? 'liked' : '') + '" onclick="toggleLike(' + p.id + ', this)">❤ <span>' + p.likes + '</span></button>' +
@@ -134,8 +134,10 @@ function submitPost() {
   if (!text) return;
   var btn = document.getElementById('composer-send');
   btn.disabled = true;
-  accountApi('/api/community/posts', 'POST', { text: text, clan: feedScope === 'clan' }).then(function(r) {
+  var spoiler = document.getElementById('composer-spoiler').checked;
+  accountApi('/api/community/posts', 'POST', { text: text, clan: feedScope === 'clan', spoiler: spoiler }).then(function(r) {
     ta.value = '';
+    document.getElementById('composer-spoiler').checked = false;
     feedPosts.unshift(r.post);
     loadFeed();
     showToast('Publicado!');
@@ -183,7 +185,7 @@ var commentsPostId = null;
 function openComments(id) {
   commentsPostId = id;
   openGenericSheet('Comentários', '<div id="comments-list" class="comments"><div class="empty-state">Carregando...</div></div>' +
-    (account ? '<div class="party-row comment-box"><input id="comment-input" maxlength="500" placeholder="Escreva um comentário" onkeydown="if(event.key===\'Enter\')sendComment()"><button class="party-btn" onclick="sendComment()">Enviar</button></div>'
+    (account ? '<div class="comment-box"><div class="party-row"><input id="comment-input" maxlength="500" placeholder="Escreva um comentário" onkeydown="if(event.key===\'Enter\')sendComment()"><button class="party-btn" onclick="sendComment()">Enviar</button></div><label class="spoiler-check"><input type="checkbox" id="comment-spoiler"> Contém spoiler</label></div>'
       : '<div class="transfer-box"><button class="party-btn" onclick="openAuth(\'login\')">Entre para comentar</button></div>'));
   loadComments();
 }
@@ -197,7 +199,7 @@ function loadComments() {
     r.comments.forEach(function(k) {
       var row = document.createElement('div');
       row.className = 'comment';
-      row.innerHTML = userLine(k.author, timeAgo(k.at)) + '<div class="comment-text"></div>' +
+      row.innerHTML = userLine(k.author, timeAgo(k.at)) + '<div class="comment-text' + (k.spoiler ? ' spoiler' : '') + '"' + (k.spoiler ? ' onclick="revealSpoiler(this)"' : '') + '></div>' +
         '<div class="comment-actions">' + (k.canDelete ? '<button onclick="deleteComment(' + k.id + ')">Apagar</button>' : '') +
         '<button onclick="reportContent(\'comment\',\'' + k.id + '\')">Denunciar</button></div>';
       row.querySelector('.comment-text').textContent = k.text;
@@ -210,8 +212,10 @@ function sendComment() {
   var input = document.getElementById('comment-input');
   var text = input.value.trim();
   if (!text) return;
-  accountApi('/api/community/posts/' + commentsPostId + '/comments', 'POST', { text: text }).then(function() {
+  var sp = document.getElementById('comment-spoiler');
+  accountApi('/api/community/posts/' + commentsPostId + '/comments', 'POST', { text: text, spoiler: !!(sp && sp.checked) }).then(function() {
     input.value = '';
+    if (sp) sp.checked = false;
     loadComments();
   }).catch(function(e) { showToast(e.message); });
 }
@@ -325,6 +329,7 @@ function renderClan(c) {
   var html = '<div class="clan-hero">' + clanBadge(c, 72) + '<div><div class="clan-name" style="font-size:20px"></div><div class="clan-desc" id="clan-desc-text"></div>' +
     '<div class="clan-members">' + c.members + ' membros · ' + (c.xp || 0).toLocaleString('pt-BR') + ' XP · desde ' + new Date(c.createdAt).toLocaleDateString('pt-BR') + '</div></div></div>' +
     '<div class="profile-actions">' + actions + (account && !c.myRole ? '<button class="party-btn ghost" onclick="reportContent(\'clan\',\'' + safeId(c.publicId) + '\')">Denunciar</button>' : '') + '</div>' +
+    clanWeekHtml(c.week) +
     '<div class="section-header"><h2 class="section-title">Membros</h2></div>' +
     c.list.map(function(m) {
       var manage = '';
@@ -333,13 +338,25 @@ function renderClan(c) {
           '<button class="mini-btn" onclick="clanMember(\'' + safeId(c.publicId) + '\',\'' + safeId(m.publicId) + '\',\'owner\')">Passar liderança</button>';
         if (c.myRole === 'owner' || m.role === 'member') manage += '<button class="mini-btn danger" onclick="clanMember(\'' + safeId(c.publicId) + '\',\'' + safeId(m.publicId) + '\',\'kick\')">Remover</button>';
       }
-      return '<div class="friend-row">' + userLine(m, escapeHtml(roleName(m.role)) + ' · ' + (m.xp || 0) + ' XP') + '<div class="mini-actions">' + manage + '</div></div>';
+      return '<div class="friend-row">' + userLine(m, escapeHtml(roleName(m.role)) + ' · ' + (m.xp || 0) + ' XP · ' + (m.week || 0) + ' eps na semana') + '<div class="mini-actions">' + manage + '</div></div>';
     }).join('') +
     (c.myRole ? '<div class="section-header"><h2 class="section-title">Feed do clã</h2></div><div class="transfer-box"><button class="party-btn ghost" onclick="closeGenericSheet();switchTab(\'community\');switchCommunity(\'feed\');setFeedScope(document.querySelectorAll(\'#com-feed-scope .filter-chip\')[2],\'clan\')">Abrir feed do clã</button></div>' : '');
   document.getElementById('generic-body').innerHTML = html;
   document.querySelector('#generic-body .clan-hero .clan-name').textContent = c.emoji + ' ' + c.name;
   document.getElementById('clan-desc-text').textContent = c.description || '';
 }
+
+// Weekly challenge: episodes watched to the end by all members since Monday.
+function clanWeekHtml(w) {
+  if (!w) return '';
+  var pct = Math.min(100, Math.round((w.episodes / w.goal) * 100));
+  var medals = w.tiers.map(function(t, i) { return '<span class="' + (i < w.done ? 'on' : '') + '">' + ['🥉', '🥈', '🥇'][i] + ' ' + t + '</span>'; }).join('');
+  return '<div class="level-box clan-week"><div class="level-head"><b>Desafio da semana</b><span>' + w.episodes + ' / ' + w.goal + ' episódios</span></div>' +
+    '<div class="level-bar"><i style="width:' + Math.max(2, pct) + '%"></i></div><div class="week-tiers">' + medals + '</div>' +
+    '<div class="party-muted">Vale todo episódio assistido até o fim pelos membros, de segunda a domingo.</div></div>';
+}
+
+function revealSpoiler(el) { el.classList.remove('spoiler'); el.onclick = null; }
 
 function joinClan(id) {
   accountApi('/api/clans/' + id + '/join', 'POST').then(function() { showToast('Bem-vindo ao clã!'); openClan(id); loadMyClan(); if (communityView === 'clans') loadClans(); })
@@ -389,14 +406,21 @@ function loadUserRanking() {
   }).catch(function(e) { socialError('rank-users', e); });
 }
 
-function loadClanRanking() {
+var clanRankPeriod = 'week';
+function loadClanRanking(period) {
+  if (period) clanRankPeriod = period;
   var el = document.getElementById('rank-clans');
   el.innerHTML = '<div class="empty-state">Carregando...</div>';
-  accountApi('/api/rankings/clans').then(function(r) {
-    el.innerHTML = r.clans.length ? r.clans.map(function(c, i) {
+  var week = clanRankPeriod === 'week';
+  accountApi('/api/rankings/clans' + (week ? '?period=week' : '')).then(function(r) {
+    var toggle = '<div class="segmented rank-period"><button class="' + (week ? 'active' : '') + '" onclick="loadClanRanking(\'week\')">Esta semana</button><button class="' + (week ? '' : 'active') + '" onclick="loadClanRanking(\'all\')">Geral</button></div>';
+    el.innerHTML = toggle + (r.clans.length ? r.clans.map(function(c, i) {
+      if (week) return '<div class="rank-item" onclick="openClan(\'' + safeId(c.publicId) + '\')">' + rankPos(i) + clanBadge(c, 40) +
+        '<div class="rank-info"><div class="rank-name">' + escapeHtml(c.name) + '</div><div class="rank-detail">' + c.members + ' membros</div></div>' +
+        '<div class="rank-score">' + (c.week || 0) + '<small> eps</small></div></div>';
       return '<div class="rank-item" onclick="openClan(\'' + safeId(c.publicId) + '\')">' + rankPos(i) + clanBadge(c, 40) +
         '<div class="rank-info"><div class="rank-name">' + escapeHtml(c.name) + '</div><div class="rank-detail">' + c.members + ' membros</div></div>' +
         '<div class="rank-score">' + (c.xp || 0).toLocaleString('pt-BR') + '<small> XP</small></div></div>';
-    }).join('') : '<div class="empty-state">Nenhum clã ainda.</div>';
+    }).join('') : '<div class="empty-state">Nenhum clã ainda.</div>');
   }).catch(function(e) { socialError('rank-clans', e); });
 }

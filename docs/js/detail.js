@@ -73,7 +73,10 @@ function openDetail(id) {
         '<div class="ep-ranges" id="ep-ranges"></div><div class="ep-list" id="ep-list"></div>';
     }
 
+    body += '<div class="detail-extra"><div id="best-server" class="party-muted"></div>' +
+      '<button class="party-btn ghost" onclick="openCharacters()">👥 Personagens e dublagem</button></div>';
     document.getElementById('detail-body').innerHTML = body;
+    showBestServer(getTitle(info));
     if (episodes.length > 0) renderEpisodeList();
     prefetchEpisode(nextEpisodeToWatch());
   });
@@ -117,6 +120,15 @@ function renderEpisodeList(page) {
       (progress > 0 ? '<div class="ep-progress"><div class="ep-progress-fill" style="width:' + progress + '%"></div></div>' : '') +
       '</div><div class="ep-info"><div class="ep-num">Episódio ' + ep.num + '</div><div class="ep-title">' + escapeHtml(ep.title || ('Episódio ' + ep.num)) + '</div></div></div>';
   }).join('');
+}
+
+// "Costuma funcionar melhor": the video host other viewers played this show on.
+function showBestServer(title) {
+  fetch(getApiBase() + '/api/health/anime?title=' + encodeURIComponent(title)).then(function(r) { return r.json(); }).then(function(j) {
+    var el = document.getElementById('best-server');
+    if (el && j.best) el.innerHTML = '⭐ Costuma funcionar melhor: <b></b> <small>(' + (+j.best.plays || 0) + ' reproduções recentes)</small>';
+    if (el && j.best) el.querySelector('b').textContent = j.best.label || j.best.host;
+  }).catch(function() {});
 }
 
 function refreshDetail() {

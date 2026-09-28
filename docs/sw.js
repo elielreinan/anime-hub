@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v14';
+var CACHE = 'animehub-v15';
 var STATE_CACHE = 'animehub-state';
 
 self.addEventListener('install', function(e) {
@@ -14,16 +14,22 @@ self.addEventListener('install', function(e) {
         scope + 'vendor/hls.min.js',
         scope + 'css/app.css',
         scope + 'js/account.js',
+        scope + 'js/admin.js',
         scope + 'js/app.js',
         scope + 'js/calendar.js',
+        scope + 'js/characters.js',
         scope + 'js/core.js',
         scope + 'js/detail.js',
+        scope + 'js/discover.js',
         scope + 'js/home.js',
+        scope + 'js/lists.js',
         scope + 'js/notifications.js',
         scope + 'js/party.js',
         scope + 'js/player.js',
         scope + 'js/profile.js',
+        scope + 'js/reviews.js',
         scope + 'js/settings.js',
+        scope + 'js/social.js',
         scope + 'js/transfer.js'
       ]);
     }).then(function() { return self.skipWaiting(); })

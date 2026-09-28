@@ -118,6 +118,24 @@ async function call(method, path, body, token, headers) {
   r = await call('POST', '/api/auth/password', { current: 'segredo123', password: 'novasenha9' }, A); check('change password', r.s === 200);
   r = await call('DELETE', '/api/me/account', { password: 'novasenha9' }, C); check('delete wrong pw', r.s === 401);
   r = await call('DELETE', '/api/me/account', { password: 'senhacai1' }, C); check('delete account', r.s === 200);
+  // v2: spoilers, public lists, clan weekly challenge, best server, status page
+  r = await call('POST', '/api/community/posts', { text: 'O final foi X', spoiler: true }, D);
+  check('spoiler post', r.j.post && r.j.post.spoiler === true, r.j.post && r.j.post.spoiler);
+  r = await call('POST', '/api/me/lists', { title: 'Meus isekais', description: 'Top', items: [{ id: '5', title: 'Frieren', cover: 'https://x/c.jpg' }, { id: '5', title: 'dup' }, { id: 'bad id!', title: 'x' }, { id: '9', title: 'X', cover: 'javascript:alert(1)' }] }, A);
+  const list = r.j.list;
+  check('list created (deduped, bad id dropped, unsafe cover cleared)', list && list.count === 2 && list.items[1].cover === '', list);
+  r = await call('GET', '/api/lists/' + list.publicId); check('public list readable anonymously', r.j.title === 'Meus isekais' && r.j.owner.name === 'Ana', r.j.owner);
+  r = await call('PUT', '/api/me/lists/' + list.publicId, { title: 'Hack', items: [] }, D); check('cannot edit others list', r.s === 404);
+  r = await call('GET', '/api/users/' + ida + '/lists'); check('user lists on profile', r.j.lists && r.j.lists.length === 1);
+  r = await call('POST', '/api/me/lists', { title: 'x', items: new Array(51).fill(0).map((_, i) => ({ id: String(i), title: 't' })) }, A); check('list max 50 items', r.s === 400);
+  await call('POST', '/api/me/watched', { animeId: '7', title: 'Dandadan', ep: 1 }, D);
+  r = await call('GET', '/api/clans/' + clan.publicId, null, D); check('clan weekly challenge', r.j.week && r.j.week.episodes >= 1 && r.j.week.goal === 50, r.j.week);
+  r = await call('GET', '/api/rankings/clans?period=week'); check('weekly clan ranking', r.j.clans && r.j.clans[0].week >= 1, r.j.clans && r.j.clans[0]);
+  for (let i = 0; i < 3; i++) await call('POST', '/api/health/report', { host: 'good.example.com', ok: true, anime: 'Frieren', label: 'Legendado · Player X' });
+  await call('POST', '/api/health/report', { host: 'bad2.example.com', ok: false, anime: 'Frieren', label: 'Ruim' });
+  r = await call('GET', '/api/health/anime?title=frieren'); check('best server for anime', r.j.best && r.j.best.host === 'good.example.com' && r.j.best.label === 'Legendado · Player X', r.j);
+  r = await call('GET', '/api/status/servers'); check('public status page data', Array.isArray(r.j.sources) && r.j.sources.length === 2 && Array.isArray(r.j.hosts), r.j.sources);
+
   // misc hardening
   r = await call('GET', '/api/me', null, 'x'.repeat(40)); check('garbage token 401', r.s === 401);
   r = await fetch(B + '/api/community/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + A }, body: '{"text":"' + 'a'.repeat(20000) + '"}' }); check('oversized body rejected', r.status === 400);

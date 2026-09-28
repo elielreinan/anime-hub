@@ -6,6 +6,14 @@ var xp = require('../lib/xp');
 var shared = require('./shared');
 
 var MAX_MEMBERS = 50;
+// Weekly challenge: episodes the whole clan finished since Monday (UTC).
+var WEEK_GOALS = [50, 150, 300];
+var WEEK_START = "date_trunc('week', now())";
+
+function weekChallenge(episodes) {
+  var goal = WEEK_GOALS.find(function(g) { return episodes < g; }) || WEEK_GOALS[WEEK_GOALS.length - 1];
+  return { episodes: episodes, goal: goal, tiers: WEEK_GOALS, done: WEEK_GOALS.filter(function(g) { return episodes >= g; }).length };
+}
 
 async function clanByPublicId(id) {
   var pid = v.publicId(id);
@@ -77,6 +85,12 @@ function register(add) {
     out.myRole = ctx.user ? await roleIn(c.id, ctx.user.id) : null;
     out.inAnotherClan = !!ctx.user && !out.myRole && !!(await db.query('SELECT 1 FROM clan_members WHERE user_id = $1', [ctx.user.id])).rows.length;
     out.full = members.length >= MAX_MEMBERS;
+    var week = (await db.query('SELECT u.public_id, count(w.*)::int AS n FROM clan_members m JOIN users u ON u.id = m.user_id LEFT JOIN watches w ON w.user_id = m.user_id AND w.watched_at >= ' + WEEK_START +
+      ' WHERE m.clan_id = $1 GROUP BY u.public_id', [c.id])).rows;
+    var byUser = {};
+    week.forEach(function(r) { byUser[r.public_id] = r.n; });
+    out.list.forEach(function(k) { k.week = byUser[k.publicId] || 0; });
+    out.week = weekChallenge(week.reduce(function(s, r) { return s + r.n; }, 0));
     return out;
   });
 

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://anime-hub-zz7f.onrender.com http://localhost:* ; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
+<title>Status · AnimeHub</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0d0d12; color: #e5e7eb; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 24px 16px 60px; }
+  a { color: #ff5a26; text-decoration: none; font-weight: 700; }
+  h1 { font-size: 26px; margin: 12px 0 4px; } h2 { font-size: 16px; margin: 28px 0 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 1px; }
+  .banner { border-radius: 14px; padding: 16px; font-weight: 800; font-size: 17px; margin-top: 16px; }
+  .ok { background: rgba(34,197,94,0.12); border: 1px solid #166534; color: #4ade80; }
+  .warn { background: rgba(234,179,8,0.12); border: 1px solid #854d0e; color: #facc15; }
+  .down { background: rgba(239,68,68,0.12); border: 1px solid #7f1d1d; color: #f87171; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: #15151f; border: 1px solid #2d2d3d; border-radius: 12px; margin-bottom: 8px; }
+  .row small { color: #9ca3af; display: block; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-right: 10px; }
+  .dot.ok { background: #22c55e; border: 0; } .dot.warn { background: #eab308; border: 0; } .dot.down { background: #ef4444; border: 0; } .dot.unknown { background: #6b7280; }
+  .name { display: flex; align-items: center; min-width: 0; word-break: break-all; }
+  .muted { color: #9ca3af; font-size: 13px; }
+</style>
+</head>
+<body><main>
+<a href="./">‹ Voltar ao AnimeHub</a>
+<h1>Status dos servidores</h1>
+<div class="muted" id="updated">Verificando...</div>
+<div class="banner warn" id="overall">Verificando...</div>
+<h2>Servidor do app</h2><div id="api"></div>
+<h2>Fontes de episódios</h2><div id="sources"></div>
+<h2>Players de vídeo (últimos 45 min)</h2><div id="hosts"></div>
+<p class="muted">As fontes são verificadas quando alguém abre um episódio; os players, pelos relatos de quem assistiu. Se um player aparece como instável, o app o coloca no fim da lista automaticamente.</p>
+</main>
+<script>
+var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? '' : 'https://anime-hub-zz7f.onrender.com';
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function ago(t) { if (!t) return 'sem dados ainda'; var m = Math.round((Date.now() - t) / 60000); return m < 1 ? 'agora há pouco' : m < 60 ? 'há ' + m + ' min' : 'há ' + Math.round(m / 60) + ' h'; }
+function row(state, name, detail) { return '<div class="row"><div class="name"><span class="dot ' + state + '"></span><div>' + esc(name) + '<small>' + esc(detail) + '</small></div></div></div>'; }
+function load() {
+  var t0 = Date.now();
+  Promise.all([
+    fetch(API + '/api/status').then(function(r) { return r.json(); }),
+    fetch(API + '/api/status/servers').then(function(r) { return r.json(); })
+  ]).then(function(res) {
+    var st = res[0], sv = res[1];
+    document.getElementById('api').innerHTML = row('ok', 'API', 'respondeu em ' + (Date.now() - t0) + ' ms' + (st.accounts ? ' · contas ativas' : ''));
+    var srcDown = sv.sources.filter(function(s) { return s.state === 'down'; }).length;
+    document.getElementById('sources').innerHTML = sv.sources.map(function(s) {
+      return row(s.state, s.name, s.state === 'ok' ? 'funcionando · ' + ago(s.lastOk) : s.state === 'down' ? 'com problemas · última falha ' + ago(s.lastFail) : 'ninguém abriu episódios desde o último reinício');
+    }).join('');
+    var bad = sv.hosts.filter(function(h) { return h.unstable; }).length;
+    document.getElementById('hosts').innerHTML = sv.hosts.length ? sv.hosts.map(function(h) {
+      return row(h.unstable ? 'down' : h.ok ? 'ok' : 'warn', h.host, h.ok + ' reproduções ok · ' + h.failed + ' falhas' + (h.unstable ? ' · instável' : ''));
+    }).join('') : '<div class="muted">Sem relatos recentes.</div>';
+    var o = document.getElementById('overall');
+    if (srcDown === sv.sources.length) { o.className = 'banner down'; o.textContent = 'Fontes de episódios fora do ar'; }
+    else if (srcDown || bad) { o.className = 'banner warn'; o.textContent = 'Funcionando, com alguns problemas'; }
+    else { o.className = 'banner ok'; o.textContent = 'Tudo funcionando'; }
+    document.getElementById('updated').textContent = 'Atualizado às ' + new Date().toLocaleTimeString('pt-BR');
+  }).catch(function() {
+    document.getElementById('api').innerHTML = row('down', 'API', 'não respondeu (o servidor gratuito pode estar acordando, tente em 1 minuto)');
+    var o = document.getElementById('overall'); o.className = 'banner down'; o.textContent = 'Servidor fora do ar ou acordando';
+  });
+}
+load();
+setInterval(load, 60000);
+</script>
+</body></html>

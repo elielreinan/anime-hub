@@ -9,7 +9,7 @@ var auth = require('../lib/auth');
 var v = require('../lib/validate');
 
 var table = [];
-var PREFIX = /^\/api\/(auth|me|users|feed|rankings|community|clans|reviews|reports|admin|health)(\/|$)/;
+var PREFIX = /^\/api\/((auth|me|users|feed|rankings|community|clans|reviews|reports|admin|health|lists)(\/|$)|status\/)/;
 var WRITE = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
 function add(method, path, opts, fn) {
@@ -61,6 +61,6 @@ async function handle(req, res, urlObj) {
   }
 }
 
-['auth', 'me', 'users', 'community', 'clans', 'reviews', 'admin', 'health'].forEach(function(name) { require('./' + name).register(add); });
+['auth', 'me', 'users', 'community', 'clans', 'reviews', 'admin', 'health', 'lists'].forEach(function(name) { require('./' + name).register(add); });
 
 module.exports = { handles: handles, handle: handle };

@@ -27,7 +27,8 @@ function loadReviews() {
     if (account) {
       html += '<div class="transfer-box"><div class="party-muted">' + (r.mine ? 'Sua avaliação' : 'O que você achou deste episódio?') + '</div>' +
         '<div class="star-input" id="star-input">' + [1, 2, 3, 4, 5].map(function(n) { return '<button type="button" onclick="setReviewRating(' + n + ')" aria-label="' + n + ' estrelas">★</button>'; }).join('') + '</div>' +
-        '<textarea class="auth-field" id="review-text" maxlength="500" rows="2" placeholder="Comentário (opcional, sem spoilers pesados!)"></textarea>' +
+        '<textarea class="auth-field" id="review-text" maxlength="500" rows="2" placeholder="Comentário (opcional)"></textarea>' +
+        '<label class="spoiler-check"><input type="checkbox" id="review-spoiler"' + (r.mine && r.mine.spoiler ? ' checked' : '') + '> Contém spoiler</label>' +
         '<div class="party-row"><button class="party-btn" style="flex:1" onclick="saveReview()">' + (r.mine ? 'Atualizar' : 'Avaliar') + '</button>' +
         (r.mine ? '<button class="party-btn ghost" onclick="deleteReview()">Remover</button>' : '') + '</div></div>';
     } else {
@@ -42,7 +43,7 @@ function loadReviews() {
     r.items.forEach(function(it) {
       var row = document.createElement('div');
       row.className = 'comment';
-      row.innerHTML = userLine(it.author, (it.friend ? 'amigo · ' : '') + timeAgo(it.at)) + '<div>' + starsHtml(it.rating) + '</div><div class="comment-text"></div>' +
+      row.innerHTML = userLine(it.author, (it.friend ? 'amigo · ' : '') + timeAgo(it.at)) + '<div>' + starsHtml(it.rating) + '</div><div class="comment-text' + (it.spoiler ? ' spoiler' : '') + '"' + (it.spoiler ? ' onclick="revealSpoiler(this)"' : '') + '></div>' +
         (it.mine ? '' : '<div class="comment-actions"><button onclick="reportContent(\'review\',\'' + reviewTarget.animeId + ':' + reviewTarget.ep + ':' + safeId(it.author.publicId) + '\')">Denunciar</button></div>');
       row.querySelector('.comment-text').textContent = it.text;
       list.appendChild(row);
@@ -61,7 +62,7 @@ function paintStars() {
 function saveReview() {
   if (!reviewRating) { showToast('Escolha de 1 a 5 estrelas'); return; }
   var t = reviewTarget;
-  accountApi('/api/reviews/' + t.animeId + '/' + t.ep, 'PUT', { rating: reviewRating, text: document.getElementById('review-text').value, title: t.title }).then(function(r) {
+  accountApi('/api/reviews/' + t.animeId + '/' + t.ep, 'PUT', { rating: reviewRating, text: document.getElementById('review-text').value, spoiler: document.getElementById('review-spoiler').checked, title: t.title }).then(function(r) {
     showToast('Avaliação salva!');
     if (r.level) renderLevel(r.level);
     loadReviews();

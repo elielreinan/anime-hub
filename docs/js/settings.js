@@ -1,5 +1,5 @@
 // ── Settings ──
-var DEFAULT_SETTINGS = { lang: 'sub', autoplay: true, resume: true, skipSeconds: 85, autoSkip: true, notifications: false, nickname: '', speed: 1, captionSize: 'm', captionBg: true };
+var DEFAULT_SETTINGS = { lang: 'sub', autoplay: true, resume: true, skipSeconds: 85, autoSkip: true, notifications: false, nickname: '', speed: 1, captionSize: 'm', captionBg: true, theme: 'dark', fontSize: 'm' };
 
 function getSettings() {
   var saved = getStore('settings'), out = {};
@@ -51,6 +51,18 @@ function onSettingToggle(key, on) {
   }
 }
 
+// ── Appearance: light/dark/system theme and text size ──
+function applyAppearance() {
+  var s = getSettings();
+  var light = s.theme === 'light' || (s.theme === 'system' && window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches);
+  document.documentElement.setAttribute('data-theme', light ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-font', s.fontSize || 'm');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', light ? '#f2f2ed' : '#0D0D12');
+}
+if (window.matchMedia) matchMedia('(prefers-color-scheme: light)').addEventListener('change', applyAppearance);
+applyAppearance();
+
 // Text tracks (::cue) only; burned-in subtitles can't be restyled.
 function applyCaptionStyle() {
   var s = getSettings();
@@ -73,6 +85,14 @@ function renderSettings() {
     return '<option value="' + v + '"' + (s.skipSeconds === v ? ' selected' : '') + '>' + v + 's</option>';
   }).join('');
   document.getElementById('settings-body').innerHTML =
+    '<div class="setting-group">Aparência</div>' +
+    settingRow('Tema', 'Claro, escuro ou igual ao do aparelho', '<div class="segmented">' + [['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Auto']].map(function(o) {
+      return '<button class="' + (s.theme === o[0] ? 'active' : '') + '" onclick="setSetting(\'theme\',\'' + o[0] + '\');applyAppearance();renderSettings()">' + o[1] + '</button>';
+    }).join('') + '</div>') +
+    settingRow('Tamanho do texto', 'Deixa tudo no app maior ou menor', '<div class="segmented">' + [['s', 'P'], ['m', 'M'], ['l', 'G'], ['xl', 'GG']].map(function(o) {
+      return '<button class="' + (s.fontSize === o[0] ? 'active' : '') + '" onclick="setSetting(\'fontSize\',\'' + o[0] + '\');applyAppearance();renderSettings()">' + o[1] + '</button>';
+    }).join('') + '</div>') +
+    settingRow('Status dos servidores', 'Veja quais fontes estão funcionando agora', '<a class="setting-danger" style="color:#fff;border-color:#2d2d3d;text-decoration:none" href="status.html">Abrir</a>') +
     '<div class="setting-group">Reprodução</div>' +
     settingRow('Áudio preferido', 'Usado quando o anime não diz se é dublado ou legendado', '<div class="segmented">' + langBtns + '</div>') +
     settingRow('Próximo episódio automático', 'Começa o próximo 5s depois que o episódio acaba', settingToggle('autoplay', s.autoplay)) +

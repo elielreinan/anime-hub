@@ -28,7 +28,8 @@ updateOnlineStatus();
 
 // ── Startup ──
 renderProfileStats();
-renderProfileName();
+renderAccount();
+if (account) { pullAccount(); startInboxPolling(); }
 applyCaptionStyle();
 doSearch();
 setTimeout(loadRecommendations, 2500);
@@ -43,9 +44,10 @@ readNotifyState().then(importFromHash);
 if (/Android/i.test(navigator.userAgent) && !window.Capacitor) document.getElementById('android-app-item').style.display = '';
 (function handleLaunchParams() {
   var params = new URLSearchParams(location.search);
-  var anime = params.get('anime'), code = params.get('party'), user = params.get('u');
-  if (anime || code || user) history.replaceState(null, '', location.pathname + location.hash);
+  var anime = params.get('anime'), code = params.get('party'), user = params.get('u'), list = params.get('list');
+  if (anime || code || user || list) history.replaceState(null, '', location.pathname + location.hash);
   if (code) joinParty(code);
+  else if (list) openPublicList(safeId(list).toUpperCase());
   else if (user) openPublicProfile(String(user).replace(/[^A-Za-z0-9]/g, '').toUpperCase());
   else if (anime) openDetail(anime);
 })();

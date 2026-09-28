@@ -44,7 +44,14 @@ function register(add) {
     return { users: r.rows.map(function(u) { var c = shared.card(u); c.xp = u.xp; return c; }) };
   });
 
-  add('GET', '/api/rankings/clans', {}, async function() {
+  add('GET', '/api/rankings/clans', {}, async function(ctx) {
+    if (ctx.query.get('period') === 'week') {
+      var w = await db.query(
+        "SELECT c.*, count(DISTINCT m.user_id) AS members, count(wt.*) AS week FROM clans c JOIN clan_members m ON m.clan_id = c.id" +
+        " JOIN users u ON u.id = m.user_id AND u.banned_at IS NULL LEFT JOIN watches wt ON wt.user_id = m.user_id AND wt.watched_at >= date_trunc('week', now())" +
+        ' WHERE NOT c.hidden GROUP BY c.id ORDER BY week DESC, members DESC LIMIT 30');
+      return { clans: w.rows.map(function(c) { var k = shared.clanCard(c); k.week = +c.week; return k; }) };
+    }
     var r = await db.query(
       'SELECT c.*, count(m.user_id) AS members, COALESCE(sum(u.xp), 0) AS xp FROM clans c' +
       ' JOIN clan_members m ON m.clan_id = c.id JOIN users u ON u.id = m.user_id AND u.banned_at IS NULL' +
