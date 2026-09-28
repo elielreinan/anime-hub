@@ -131,23 +131,53 @@ var authMode = 'login';
 function openAuth(mode) {
   setAuthMode(mode || 'login');
   document.getElementById('auth-error').textContent = '';
-  openSheet('auth-sheet');
+  document.getElementById('auth-sheet').classList.add('show');
+  setTimeout(function() { document.getElementById(authMode === 'register' ? 'auth-name' : 'auth-email').focus(); }, 50);
+}
+
+function closeAuth() {
+  document.getElementById('auth-sheet').classList.remove('show');
+  var pw = document.getElementById('auth-password');
+  pw.value = '';
+  pw.type = 'password';
+  document.getElementById('auth-eye').setAttribute('aria-pressed', 'false');
 }
 
 function setAuthMode(mode) {
   authMode = mode;
   var reg = mode === 'register';
   document.getElementById('auth-title').textContent = reg ? 'Criar conta' : 'Entrar';
+  document.getElementById('auth-sub').textContent = reg ? 'Grátis. Seu e-mail não aparece para ninguém.' : 'Suas listas e seu progresso em qualquer aparelho.';
   document.getElementById('auth-submit').textContent = reg ? 'Criar conta' : 'Entrar';
-  document.getElementById('auth-tab-login').className = 'party-btn' + (reg ? ' ghost' : '');
-  document.getElementById('auth-tab-register').className = 'party-btn' + (reg ? '' : ' ghost');
+  document.getElementById('auth-switch').innerHTML = reg
+    ? 'Já tem conta? <a href="#" onclick="setAuthMode(\'login\');return false">Entrar</a>'
+    : 'Não tem conta? <a href="#" onclick="setAuthMode(\'register\');return false">Criar conta</a>';
   var name = document.getElementById('auth-name');
   name.style.display = reg ? '' : 'none';
   name.required = reg;
   if (reg && !name.value && getSettings().nickname) name.value = getSettings().nickname;
-  document.getElementById('auth-password').autocomplete = reg ? 'new-password' : 'current-password';
+  var pw = document.getElementById('auth-password');
+  pw.autocomplete = reg ? 'new-password' : 'current-password';
+  pw.placeholder = reg ? 'Senha (mínimo 8 caracteres)' : 'Senha';
   document.getElementById('auth-terms').style.display = reg ? '' : 'none';
+  document.getElementById('auth-error').textContent = '';
   renderGoogleButton();
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('auth-sheet').classList.contains('show')) closeAuth();
+});
+
+function togglePasswordVisibility() {
+  var pw = document.getElementById('auth-password'), eye = document.getElementById('auth-eye');
+  var show = pw.type === 'password';
+  pw.type = show ? 'text' : 'password';
+  eye.setAttribute('aria-pressed', show ? 'true' : 'false');
+  eye.setAttribute('aria-label', show ? 'Esconder senha' : 'Mostrar senha');
+  eye.innerHTML = show
+    ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.9 17.9A10.4 10.4 0 0 1 12 19c-6.4 0-10-7-10-7a18.5 18.5 0 0 1 5.1-5.9M9.9 5.2A9.3 9.3 0 0 1 12 5c6.4 0 10 7 10 7a18.6 18.6 0 0 1-2.2 3.2"/><path d="M14.1 14.1a3 3 0 1 1-4.2-4.2"/><path d="m2 2 20 20"/></svg>'
+    : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  pw.focus();
 }
 
 // ── Sign in with Google (Google Identity Services) ──
@@ -184,7 +214,7 @@ function onGoogleCredential(resp) {
   var err = document.getElementById('auth-error');
   var accept = document.getElementById('auth-accept').checked;
   accountApi('/api/auth/google', 'POST', { credential: resp.credential, acceptTerms: accept }).then(function(res) {
-    return signedIn(res).then(function() { closeSheet('auth-sheet'); showToast('Olá, ' + res.user.name + '!'); });
+    return signedIn(res).then(function() { closeAuth(); showToast('Olá, ' + res.user.name + '!'); });
   }).catch(function(e) {
     if (e.code === 'terms_required') { setAuthMode('register'); err.textContent = 'Primeiro acesso: marque que aceita os termos e toque de novo em "Continuar com o Google".'; return; }
     err.textContent = e.message;
@@ -205,7 +235,7 @@ function submitAuth(e) {
   accountApi('/api/auth/' + authMode, 'POST', body).then(function(res) {
     return signedIn(res).then(function() {
       document.getElementById('auth-password').value = '';
-      closeSheet('auth-sheet');
+      closeAuth();
       showToast(authMode === 'register' ? 'Conta criada! Seu ID é #' + res.user.publicId : 'Bem-vindo de volta, ' + res.user.name + '!');
     });
   }).catch(function(e) {

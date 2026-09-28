@@ -523,3 +523,22 @@ html[data-theme="light"] .star, html[data-theme="light"] .star-input button, htm
 html[data-theme="light"] .week-tiers span, html[data-theme="light"] .beta-modal > div:first-child { filter: invert(1) hue-rotate(180deg); }
 html[data-theme="light"] .ach:not(.on) span { filter: invert(1) hue-rotate(180deg) grayscale(1); }
 .logo a { color: inherit; text-decoration: none; }
+
+/* ── Sign in / sign up window ── */
+.auth-backdrop { display: none; position: fixed; inset: 0; z-index: 295; background: rgba(0,0,0,0.65); align-items: center; justify-content: center; padding: 16px; }
+.auth-backdrop.show { display: flex; }
+.auth-modal { position: relative; width: min(100%, 380px); background: #15151f; border: 1px solid #2d2d3d; border-radius: 18px; padding: 24px 20px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: 0 20px 50px rgba(0,0,0,0.6); max-height: calc(100vh - 32px); overflow-y: auto; }
+.auth-modal h2 { font-size: 22px; font-weight: 900; }
+.auth-sub { font-size: 13px; color: var(--muted); margin: -4px 0 6px; }
+.auth-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%; background: none; border: none; color: #9ca3af; font-size: 18px; cursor: pointer; }
+.auth-close:hover { background: #22222e; color: #fff; }
+.auth-pass { position: relative; }
+.auth-pass .auth-field { padding-right: 46px; }
+.auth-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; background: none; border: none; color: #9ca3af; cursor: pointer; display: flex; align-items: center; justify-content: center; border-radius: 10px; }
+.auth-eye[aria-pressed="true"] { color: var(--accent); }
+.auth-modal .party-btn[type=submit] { padding: 13px; font-size: 15px; margin-top: 2px; }
+.auth-google { display: flex; justify-content: center; }
+.auth-google:empty { display: none; }
+.auth-switch { text-align: center; font-size: 13px; color: var(--muted); margin-top: 4px; }
+.auth-switch a { color: var(--accent); font-weight: 700; text-decoration: none; }
+.auth-error:empty { display: none; }

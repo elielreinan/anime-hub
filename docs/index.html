@@ -260,25 +260,25 @@
     </div>
   </div>
 
-  <!-- ACCOUNT -->
-  <div class="sheet" id="auth-sheet">
-    <div class="sheet-header">
-      <button class="sheet-back" onclick="closeSheet('auth-sheet')" aria-label="Voltar"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg></button>
+  <!-- ACCOUNT: one small window, sign in or sign up -->
+  <div class="auth-backdrop" id="auth-sheet" onclick="if(event.target===this)closeAuth()">
+    <form class="auth-modal" id="auth-form" onsubmit="submitAuth(event)" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <button type="button" class="auth-close" onclick="closeAuth()" aria-label="Fechar">✕</button>
       <h2 id="auth-title">Entrar</h2>
-    </div>
-    <form class="transfer-box" id="auth-form" onsubmit="submitAuth(event)">
-      <div class="auth-tabs">
-        <button type="button" class="party-btn" id="auth-tab-login" onclick="setAuthMode('login')">Entrar</button>
-        <button type="button" class="party-btn ghost" id="auth-tab-register" onclick="setAuthMode('register')">Criar conta</button>
-      </div>
-      <input class="auth-field" id="auth-name" maxlength="30" placeholder="Seu nome (aparece para os amigos)" autocomplete="nickname" style="display:none">
+      <p class="auth-sub" id="auth-sub">Suas listas e seu progresso em qualquer aparelho.</p>
+      <input class="auth-field" id="auth-name" maxlength="30" placeholder="Seu nome" autocomplete="nickname" style="display:none">
       <input class="auth-field" id="auth-email" type="email" placeholder="E-mail" autocomplete="email" required>
-      <input class="auth-field" id="auth-password" type="password" minlength="8" placeholder="Senha (mínimo 8 caracteres)" autocomplete="current-password" required>
-      <label class="auth-terms" id="auth-terms" style="display:none"><input type="checkbox" id="auth-accept"> Li e aceito os <a href="termos.html" target="_blank" rel="noopener">termos de uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener">política de privacidade</a></label>
-      <div class="auth-error" id="auth-error"></div>
+      <div class="auth-pass">
+        <input class="auth-field" id="auth-password" type="password" minlength="8" placeholder="Senha" autocomplete="current-password" required>
+        <button type="button" class="auth-eye" id="auth-eye" onclick="togglePasswordVisibility()" aria-label="Mostrar senha" aria-pressed="false">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        </button>
+      </div>
+      <label class="auth-terms" id="auth-terms" style="display:none"><input type="checkbox" id="auth-accept"> Aceito os <a href="termos.html" target="_blank" rel="noopener">termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener">privacidade</a></label>
+      <div class="auth-error" id="auth-error" role="alert"></div>
       <button class="party-btn" type="submit" id="auth-submit">Entrar</button>
-      <div id="google-signin" style="display:flex;justify-content:center;min-height:0"></div>
-      <div class="party-muted">Com uma conta, suas listas, histórico e animes seguidos ficam salvos e aparecem em qualquer aparelho em que você entrar. Seu e-mail não aparece para ninguém.</div>
+      <div id="google-signin" class="auth-google"></div>
+      <div class="auth-switch" id="auth-switch"></div>
     </form>
   </div>
 
