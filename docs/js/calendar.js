@@ -54,24 +54,56 @@ function loadCalendar() {
 }
 
 // ── Home: "Lançados hoje" ──
-// Today's shows in the viewer's time zone; the ones already broadcast come first.
+// Episodes that really arrived in our catalog (its "latest" feed, newest first) for
+// shows that aired in Japan in the last 30 hours. The feed has no dates, so the
+// MyAnimeList broadcast time is what tells today's episode from last week's.
+function lastBroadcastMs(jstDay, time) {
+  var hm = String(time || '').split(':');
+  if (hm.length < 2) return 0;
+  var jstNow = new Date(Date.now() + 9 * 3600000);
+  var base = Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()) + ((jstDay - jstNow.getUTCDay() + 7) % 7) * 86400000;
+  var t = base + (+hm[0] * 60 + +hm[1]) * 60000 - 9 * 3600000;
+  return t > Date.now() ? t - 7 * 86400000 : t;
+}
+
+function catalogShowName(epTitle) {
+  return String(epTitle || '').replace(/\s+Epis[oó]dio\s+\d+.*$/i, '').replace(/\s*\((Dublado|Legendado)\)|\s+Dublado$/i, '').trim();
+}
+
 function loadTodayReleases() {
   var section = document.getElementById('today-section');
   if (!section) return;
-  getCalendarItems().then(function(items) {
-    var now = new Date(), today = now.getDay();
-    var hm = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
-    var list = items.filter(function(a) { return a.day === today; });
+  Promise.all([getAiringShows(), atvFetch('latest')]).then(function(r) {
+    var shows = r[0] || [], latest = filterItems(r[1] || []);
+    var recent = [];
+    shows.forEach(function(c) {
+      var day = CAL_DAY_NAMES.indexOf(String(c.bday).toLowerCase());
+      if (day === -1) return;
+      var at = lastBroadcastMs(day, c.btime);
+      if (at && Date.now() - at < 30 * 3600000) {
+        recent.push({ at: at, keys: [c.title, c.en].concat(catalogQueries(c.title, c.en).slice(2, 4)).map(normalizeTitle).filter(function(k) { return k.length >= 4; }) });
+      }
+    });
+    var seen = {}, list = [];
+    latest.forEach(function(ep) {
+      var id = safeId(ep.category_id);
+      if (!id || seen[id]) return;
+      var name = catalogShowName(ep.title), n = normalizeTitle(name);
+      var hit = recent.filter(function(s) { return s.keys.some(function(k) { return n === k || n.indexOf(k + ' ') === 0 || k.indexOf(n + ' ') === 0; }); })[0];
+      if (!hit) return;
+      seen[id] = true;
+      var m = String(ep.title).match(/Epis[oó]dio\s+(\d+)/i);
+      list.push({ id: id, name: name, ep: m ? m[1] : '', img: ep.category_image ? ATV_IMG + ep.category_image : '', at: hit.at });
+    });
     if (!list.length) { section.style.display = 'none'; return; }
-    list.forEach(function(a) { a.out = a.time <= hm; });
-    list.sort(function(a, b) { return a.out !== b.out ? (a.out ? -1 : 1) : a.out ? (a.time < b.time ? 1 : -1) : (a.time < b.time ? -1 : 1); });
-    var out = list.filter(function(a) { return a.out; }).length;
-    document.getElementById('today-count').textContent = out + ' de ' + list.length + ' já saíram';
+    document.getElementById('today-count').textContent = list.length + (list.length === 1 ? ' episódio novo' : ' episódios novos');
     document.getElementById('today-releases').innerHTML = list.map(function(a) {
-      return '<div class="poster-card" onclick="catalogLookup(this.dataset.title, this.dataset.en)" data-title="' + escapeHtml(a.title) + '" data-en="' + escapeHtml(a.en || '') + '">' +
+      var hours = Math.max(1, Math.round((Date.now() - a.at) / 3600000));
+      return '<div class="poster-card" onclick="openDetail(\'' + a.id + '\')">' +
         '<div class="poster-img"><img src="' + escapeHtml(a.img) + '" alt="" loading="lazy">' +
-        '<span class="today-badge' + (a.out ? ' out' : '') + '">' + (a.out ? 'Saiu ' : 'Às ') + escapeHtml(a.time) + '</span></div>' +
-        '<div class="poster-title">' + escapeHtml(a.title) + '</div></div>';
+        (a.ep ? '<span class="today-badge out">Ep ' + escapeHtml(a.ep) + '</span>' : '') + '</div>' +
+        '<div class="poster-title">' + escapeHtml(a.name) + '</div>' +
+        '<div class="poster-sub">no Japão há ' + hours + 'h</div></div>';
     }).join('');
     section.style.display = '';
   }).catch(function() { section.style.display = 'none'; });
