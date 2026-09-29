@@ -1,4 +1,4 @@
-var CACHE = 'animehub-v16';
+var CACHE = 'animehub-v17';
 var STATE_CACHE = 'animehub-state';
 
 self.addEventListener('install', function(e) {

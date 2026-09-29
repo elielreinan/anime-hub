@@ -7,7 +7,7 @@ on:
         description: App URL to test (default runs the server locally)
         default: http://localhost:3000/
       only:
-        description: '"party" runs only the watch party check; "probe" tries new video sources instead'
+        description: '"party" runs only the watch party check; "probe" tries new video sources; "feed" prints a sample of the catalog feeds'
         default: ''
   # Daily check that every source still plays; a failure e-mails the repo owner.
   schedule:
@@ -41,14 +41,20 @@ jobs:
       - name: Probe new video sources
         if: ${{ inputs.only == 'probe' }}
         run: node scripts/probe-sources.js
+      - name: Catalog feed sample
+        if: ${{ inputs.only == 'feed' }}
+        run: |
+          for q in latest calendario; do
+            echo "== $q"; curl -s -m 30 "http://localhost:3000/api/atv/$q" | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const j=JSON.parse(d);console.log(Array.isArray(j)?j.length+' items':typeof j);console.log(JSON.stringify(Array.isArray(j)?j.slice(0,4):j,null,1).slice(0,3000))})"
+          done
       - name: Playback end-to-end (real Chrome)
-        if: ${{ inputs.only != 'probe' }}
+        if: ${{ inputs.only != 'probe' && inputs.only != 'feed' }}
         env:
           APP_URL: ${{ inputs.app_url }}
           ONLY: ${{ inputs.only }}
         run: node scripts/e2e-play.js "${APP_URL:-http://localhost:3000/}"
       - name: Playback end-to-end (WebKit, Safari engine)
-        if: ${{ !cancelled() && inputs.only != 'probe' && (inputs.app_url == '' || startsWith(inputs.app_url, 'http://localhost')) }}
+        if: ${{ !cancelled() && inputs.only != 'probe' && inputs.only != 'feed' && (inputs.app_url == '' || startsWith(inputs.app_url, 'http://localhost')) }}
         env:
           ONLY: ${{ inputs.only }}
         run: npx playwright install --with-deps webkit && BROWSER=webkit node scripts/e2e-play.js

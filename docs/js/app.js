@@ -51,6 +51,24 @@ readNotifyState().then(function() {
 setInterval(checkNewEpisodes, 30 * 60 * 1000);
 readNotifyState().then(importFromHash);
 if (/Android/i.test(navigator.userAgent) && !window.Capacitor) document.getElementById('android-app-item').style.display = '';
+// Mobile browsers sometimes reload a tab left in the background; bring back the tab
+// and the anime that were open instead of starting over on the home screen.
+function saveView(patch) {
+  try { var v = JSON.parse(sessionStorage.getItem('ah_view')) || {}; Object.assign(v, patch); sessionStorage.setItem('ah_view', JSON.stringify(v)); } catch (e) {}
+}
+function restoreView() {
+  var v;
+  try { v = JSON.parse(sessionStorage.getItem('ah_view')); } catch (e) {}
+  if (!v) return;
+  if (v.tab && v.tab !== 'home' && document.getElementById('page-' + v.tab)) switchTab(v.tab);
+  if (v.anime) openDetail(v.anime);
+}
+(function trackView() {
+  var sw = switchTab, od = openDetail, cd = closeDetail;
+  window.switchTab = function(name) { sw.apply(null, arguments); saveView({ tab: name }); };
+  window.openDetail = function(id) { od.apply(null, arguments); saveView({ anime: safeId(id) }); };
+  window.closeDetail = function() { cd.apply(null, arguments); saveView({ anime: null }); };
+})();
 (function handleLaunchParams() {
   var params = new URLSearchParams(location.search);
   var anime = params.get('anime'), code = params.get('party'), user = params.get('u'), list = params.get('list');
@@ -59,13 +77,10 @@ if (/Android/i.test(navigator.userAgent) && !window.Capacitor) document.getEleme
   else if (list) openPublicList(safeId(list).toUpperCase());
   else if (user) openPublicProfile(String(user).replace(/[^A-Za-z0-9]/g, '').toUpperCase());
   else if (anime) openDetail(anime);
+  else restoreView();
 })();
 
 // ── Service Worker ──
-if ('serviceWorker' in navigator) {
-  var hadController = !!navigator.serviceWorker.controller;
-  navigator.serviceWorker.addEventListener('controllerchange', function() {
-    if (hadController && !window._swReloaded) { window._swReloaded = true; location.reload(); }
-  });
-  navigator.serviceWorker.register('sw.js').catch(function() {});
-}
+// No reload when a new version is installed: that threw people back to the home
+// screen mid-use. Code is fetched network-first, so the next open is already new.
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(function() {});
