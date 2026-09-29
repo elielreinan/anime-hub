@@ -21,7 +21,8 @@ async function insertUser(fields, tries) {
 
 async function signedIn(ctx, u, action) {
   if (u.banned_at) v.fail(403, 'Esta conta foi suspensa' + (u.ban_reason ? ': ' + u.ban_reason : ''));
-  var token = await auth.newSession(u, ctx.req);
+  // "Manter conectado" off: a short session, and the app keeps it only until the tab closes.
+  var token = await auth.newSession(u, ctx.req, ctx.body.remember === false ? 1 : 0);
   auth.audit(ctx.req, u.id, action);
   u.role = auth.isAdminEmail(u.email) ? 'admin' : u.role;
   return { token: token, user: shared.me(u) };

@@ -522,7 +522,8 @@ html[data-theme="light"] .reaction-float, html[data-theme="light"] .party-reacti
 html[data-theme="light"] .star, html[data-theme="light"] .star-input button, html[data-theme="light"] .hero-slide,
 html[data-theme="light"] .week-tiers span, html[data-theme="light"] .beta-modal > div:first-child { filter: invert(1) hue-rotate(180deg); }
 html[data-theme="light"] .ach:not(.on) span { filter: invert(1) hue-rotate(180deg) grayscale(1); }
-.logo a { color: inherit; text-decoration: none; }
+.logo a, .logo a:link, .logo a:visited, .logo a:hover, .logo a:active { color: #fff; text-decoration: none; }
+.logo a .logo-accent { color: var(--accent); }
 
 /* ── Sign in / sign up window ── */
 .auth-backdrop { display: none; position: fixed; inset: 0; z-index: 295; background: rgba(0,0,0,0.65); align-items: center; justify-content: center; padding: 16px; }
@@ -542,3 +543,14 @@ html[data-theme="light"] .ach:not(.on) span { filter: invert(1) hue-rotate(180de
 .auth-switch { text-align: center; font-size: 13px; color: var(--muted); margin-top: 4px; }
 .auth-switch a { color: var(--accent); font-weight: 700; text-decoration: none; }
 .auth-error:empty { display: none; }
+.auth-remember { display: flex; align-items: center; justify-content: space-between; font-size: 14px; color: #d1d5db; padding: 2px 2px; }
+.auth-remember > label:first-child { cursor: pointer; }
+.section-note { font-size: 12px; color: var(--muted); }
+.today-badge { position: absolute; left: 6px; bottom: 6px; background: rgba(0,0,0,0.78); color: #d1d5db; font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: 6px; }
+.today-badge.out { background: var(--accent); color: #fff; }
+.about { padding: 8px 18px 28px; color: #d1d5db; font-size: 14px; line-height: 1.6; }
+.about-logo { font-size: 30px; font-weight: 900; font-style: italic; letter-spacing: -1px; color: #fff; text-align: center; margin: 10px 0 14px; }
+.about h3 { color: #fff; font-size: 15px; margin: 18px 0 6px; }
+.about p { margin-bottom: 8px; }
+.about a { color: var(--accent); }
+.about-links { margin-top: 20px; text-align: center; font-size: 13px; }

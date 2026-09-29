@@ -136,6 +136,18 @@ async function call(method, path, body, token, headers) {
   r = await call('GET', '/api/health/anime?title=frieren'); check('best server for anime', r.j.best && r.j.best.host === 'good.example.com' && r.j.best.label === 'Legendado · Player X', r.j);
   r = await call('GET', '/api/status/servers'); check('public status page data', Array.isArray(r.j.sources) && r.j.sources.length === 2 && Array.isArray(r.j.hosts), r.j.sources);
 
+  // feedback (anonymous or signed in) and the admin inbox
+  r = await call('POST', '/api/feedback', { kind: 'bug', text: '<b>player</b> travou', client: 'web · 390x844' }); check('anonymous feedback', r.s === 200, r.j);
+  r = await call('POST', '/api/feedback', { kind: 'idea', text: '   ' }, D); check('empty feedback rejected', r.s === 400);
+  r = await call('POST', '/api/feedback', { kind: 'hack', text: 'Mais animes dublados' }, D); check('signed-in feedback (unknown kind -> other)', r.s === 200);
+  r = await call('GET', '/api/admin/feedback', null, D); check('feedback inbox admin only', r.s === 403);
+  r = await call('GET', '/api/admin/feedback', null, A);
+  const fb = r.j.items || [];
+  check('admin sees feedback (raw text, author, kind)', fb.length === 2 && fb[0].kind === 'other' && fb[0].author && fb[0].author.name === 'Dan' && fb[1].text === '<b>player</b> travou' && !fb[1].author, fb);
+  r = await call('POST', '/api/admin/feedback/' + fb[1].id + '/done', {}, A); check('feedback resolved', r.s === 200);
+  r = await call('GET', '/api/admin/feedback', null, A); check('resolved feedback leaves inbox', r.j.items.length === 1);
+  r = await call('POST', '/api/auth/login', { email: 'dan@test.com', password: 'senhadan1', remember: false }); check('login without "manter conectado"', r.s === 200 && r.j.token);
+
   // misc hardening
   r = await call('GET', '/api/me', null, 'x'.repeat(40)); check('garbage token 401', r.s === 401);
   r = await fetch(B + '/api/community/posts', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + A }, body: '{"text":"' + 'a'.repeat(20000) + '"}' }); check('oversized body rejected', r.status === 400);

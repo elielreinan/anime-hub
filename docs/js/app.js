@@ -40,6 +40,7 @@ renderAccount();
 if (account) { pullAccount(); startInboxPolling(); }
 applyCaptionStyle();
 doSearch();
+setTimeout(loadTodayReleases, 800);
 setTimeout(loadRecommendations, 2500);
 fetch(getApiBase() + '/api/status').catch(function() {});
 initCookieBanner();

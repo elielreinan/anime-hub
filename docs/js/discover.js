@@ -82,11 +82,35 @@ function openFromDiscover(key) {
   if (c) catalogLookup(c.title, c.en);
 }
 
+// MyAnimeList titles rarely match our catalog word for word ("Mushoku Tensei III:
+// Isekai Ittara Honki Dasu" vs "Mushoku Tensei 3ª Temporada"), so we try the full
+// title first and then progressively shorter versions of it.
+function catalogQueries(title, alt) {
+  var out = [];
+  function push(q) { q = String(q || '').replace(/\s+/g, ' ').trim(); if (q.length >= 3 && out.indexOf(q) === -1) out.push(q); }
+  function base(t) {
+    return String(t || '').split(/[:\u2013\u2014]| - /)[0]
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/\b(\d+(st|nd|rd|th)\s+season|season\s*\d+|part\s*\d+|cour\s*\d+|final\s+season|the\s+movie|movie)\b/gi, ' ')
+      .replace(/\s+(II|III|IV|V|VI|\d+)\s*$/i, ' ');
+  }
+  function words(t, n) { return String(t || '').split(/\s+/).slice(0, n).join(' '); }
+  push(title); push(alt);
+  push(base(title)); push(base(alt));
+  push(words(base(title), 2)); push(words(base(alt), 2));
+  return out;
+}
+
 // Finds a title in our catalog: opens it directly when there's a single match.
 function catalogLookup(title, alt) {
   showToast('Procurando "' + title + '" no catálogo...');
+  var queries = catalogQueries(title, alt);
   var search = function(q) { return atvFetch('search=' + encodeURIComponent(q)).then(function(raw) { var d = filterItems(raw); return Array.isArray(d) ? d : []; }); };
-  search(title).then(function(res) { return res.length || !alt ? res : search(alt); }).then(function(res) {
+  var tryNext = function(i) {
+    if (i >= queries.length) return Promise.resolve([]);
+    return search(queries[i]).then(function(res) { return res.length ? res : tryNext(i + 1); });
+  };
+  tryNext(0).then(function(res) {
     if (!res.length) { showToast('Esse ainda não está no nosso catálogo'); return; }
     if (res.length === 1) { openDetail(safeId(res[0].id || res[0].category_id)); return; }
     openGenericSheet('Escolha no catálogo', '<div class="anime-grid" style="margin-top:12px">' + res.slice(0, 30).map(createPosterCard).join('') + '</div>');

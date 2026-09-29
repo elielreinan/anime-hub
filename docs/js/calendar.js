@@ -34,19 +34,47 @@ function fetchCalendar() {
   });
 }
 
+// One request shared by the agenda and the home's "Lançados hoje".
+function getCalendarItems() {
+  if (calendarItems) return Promise.resolve(calendarItems);
+  if (!calendarLoading) {
+    calendarLoading = fetchCalendar().then(function(items) { calendarItems = items; calendarLoading = null; return items; },
+      function(e) { calendarLoading = null; throw e; });
+  }
+  return calendarLoading;
+}
+
 function loadCalendar() {
   renderCalendarDays();
   if (calendarItems) { renderCalendar(); return; }
   document.getElementById('cal-list').innerHTML = '<div class="empty-state">Carregando lançamentos...</div>';
-  if (!calendarLoading) {
-    calendarLoading = fetchCalendar().then(function(items) {
-      calendarItems = items;
-      renderCalendar();
-    }).catch(function() {
-      calendarItems = null;
-      document.getElementById('cal-list').innerHTML = '<div class="empty-state">Não foi possível carregar a agenda agora.<div class="profile-actions"><button class="party-btn ghost" onclick="loadCalendar()">Tentar de novo</button></div></div>';
-    }).then(function() { calendarLoading = null; });
-  }
+  getCalendarItems().then(renderCalendar, function() {
+    document.getElementById('cal-list').innerHTML = '<div class="empty-state">Não foi possível carregar a agenda agora.<div class="profile-actions"><button class="party-btn ghost" onclick="loadCalendar()">Tentar de novo</button></div></div>';
+  });
+}
+
+// ── Home: "Lançados hoje" ──
+// Today's shows in the viewer's time zone; the ones already broadcast come first.
+function loadTodayReleases() {
+  var section = document.getElementById('today-section');
+  if (!section) return;
+  getCalendarItems().then(function(items) {
+    var now = new Date(), today = now.getDay();
+    var hm = ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+    var list = items.filter(function(a) { return a.day === today; });
+    if (!list.length) { section.style.display = 'none'; return; }
+    list.forEach(function(a) { a.out = a.time <= hm; });
+    list.sort(function(a, b) { return a.out !== b.out ? (a.out ? -1 : 1) : a.out ? (a.time < b.time ? 1 : -1) : (a.time < b.time ? -1 : 1); });
+    var out = list.filter(function(a) { return a.out; }).length;
+    document.getElementById('today-count').textContent = out + ' de ' + list.length + ' já saíram';
+    document.getElementById('today-releases').innerHTML = list.map(function(a) {
+      return '<div class="poster-card" onclick="catalogLookup(this.dataset.title, this.dataset.en)" data-title="' + escapeHtml(a.title) + '" data-en="' + escapeHtml(a.en || '') + '">' +
+        '<div class="poster-img"><img src="' + escapeHtml(a.img) + '" alt="" loading="lazy">' +
+        '<span class="today-badge' + (a.out ? ' out' : '') + '">' + (a.out ? 'Saiu ' : 'Às ') + escapeHtml(a.time) + '</span></div>' +
+        '<div class="poster-title">' + escapeHtml(a.title) + '</div></div>';
+    }).join('');
+    section.style.display = '';
+  }).catch(function() { section.style.display = 'none'; });
 }
 
 function renderCalendarDays() {
@@ -71,7 +99,7 @@ function renderCalendar() {
   var list = calendarItems.filter(function(a) { return a.day === calendarDay; }).sort(function(a, b) { return a.time < b.time ? -1 : 1; });
   document.getElementById('cal-list').innerHTML = list.length ? list.map(function(a) {
     var followed = follow[normalizeTitle(a.title)] || follow[normalizeTitle(a.en)];
-    return '<div class="cal-item" onclick="searchFromCalendar(this.dataset.title)" data-title="' + escapeHtml(a.title) + '">' +
+    return '<div class="cal-item" onclick="catalogLookup(this.dataset.title, this.dataset.en)" data-title="' + escapeHtml(a.title) + '" data-en="' + escapeHtml(a.en || '') + '">' +
       '<img src="' + escapeHtml(a.img) + '" alt="" loading="lazy">' +
       '<div style="min-width:0"><div class="cal-time">' + a.time + (followed ? '<span class="cal-follow">Seguindo</span>' : '') + '</div>' +
       '<div class="cal-title">' + escapeHtml(a.title) + '</div>' +
@@ -80,8 +108,3 @@ function renderCalendar() {
     : '<div style="padding:40px;text-align:center;color:var(--muted)">Nenhum lançamento neste dia.</div>';
 }
 
-function searchFromCalendar(title) {
-  searchInput.value = title;
-  switchTab('explore');
-  doSearch();
-}

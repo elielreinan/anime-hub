@@ -2,11 +2,19 @@
 // Signed in, the account is the source of truth: local changes are pushed a few
 // seconds later, and a newer copy on the server replaces the local one on start.
 // The first sign-in on a device merges what was already saved here into the account.
-var account = (function() { try { var a = JSON.parse(localStorage.getItem('ah_account')); return a && a.token && a.user ? a : null; } catch (e) { return null; } })();
+// "Manter conectado" off keeps the session in sessionStorage: gone when the browser closes.
+var account = (function() {
+  function read(store) { try { var a = JSON.parse(store.getItem('ah_account')); return a && a.token && a.user ? a : null; } catch (e) { return null; } }
+  return read(localStorage) || read(sessionStorage);
+})();
 var syncTimer = null, syncDirty = false, syncApplying = false;
 
 function saveAccount() {
-  try { if (account) localStorage.setItem('ah_account', JSON.stringify(account)); else localStorage.removeItem('ah_account'); } catch (e) {}
+  try {
+    localStorage.removeItem('ah_account');
+    sessionStorage.removeItem('ah_account');
+    if (account) (account.remember === false ? sessionStorage : localStorage).setItem('ah_account', JSON.stringify(account));
+  } catch (e) {}
 }
 
 function accountApi(path, method, body) {
@@ -116,7 +124,8 @@ function showContinueBanner(h) {
 }
 
 function signedIn(res) {
-  account = { token: res.token, user: res.user, syncedAt: null };
+  var remember = document.getElementById('auth-remember');
+  account = { token: res.token, user: res.user, syncedAt: null, remember: !remember || remember.checked };
   saveAccount();
   return accountApi('/api/me').then(function(r) {
     return r.data && r.data.v === 1 ? mergeUserData(r.data) : null;
@@ -213,7 +222,7 @@ function renderGoogleButton() {
 function onGoogleCredential(resp) {
   var err = document.getElementById('auth-error');
   var accept = document.getElementById('auth-accept').checked;
-  accountApi('/api/auth/google', 'POST', { credential: resp.credential, acceptTerms: accept }).then(function(res) {
+  accountApi('/api/auth/google', 'POST', { credential: resp.credential, acceptTerms: accept, remember: document.getElementById('auth-remember').checked }).then(function(res) {
     return signedIn(res).then(function() { closeAuth(); showToast('Olá, ' + res.user.name + '!'); });
   }).catch(function(e) {
     if (e.code === 'terms_required') { setAuthMode('register'); err.textContent = 'Primeiro acesso: marque que aceita os termos e toque de novo em "Continuar com o Google".'; return; }
@@ -224,7 +233,7 @@ function onGoogleCredential(resp) {
 function submitAuth(e) {
   e.preventDefault();
   var btn = document.getElementById('auth-submit'), err = document.getElementById('auth-error');
-  var body = { email: document.getElementById('auth-email').value, password: document.getElementById('auth-password').value };
+  var body = { email: document.getElementById('auth-email').value, password: document.getElementById('auth-password').value, remember: document.getElementById('auth-remember').checked };
   if (authMode === 'register') {
     body.name = document.getElementById('auth-name').value;
     body.acceptTerms = document.getElementById('auth-accept').checked;

@@ -2,7 +2,7 @@
 
 function openAdmin() {
   openGenericSheet('Administração', '<div class="rank-tabs" style="padding-top:12px">' +
-    ['stats:Visão geral', 'reports:Denúncias', 'users:Usuários', 'audit:Auditoria'].map(function(t, i) {
+    ['stats:Visão geral', 'reports:Denúncias', 'feedback:Feedback', 'users:Usuários', 'audit:Auditoria'].map(function(t, i) {
       var p = t.split(':');
       return '<button class="filter-chip' + (i ? '' : ' active') + '" onclick="adminTab(this,\'' + p[0] + '\')">' + p[1] + '</button>';
     }).join('') + '</div><div id="admin-body"></div>');
@@ -12,7 +12,7 @@ function openAdmin() {
 function adminTab(el, tab) {
   el.parentElement.querySelectorAll('.filter-chip').forEach(function(c) { c.classList.remove('active'); });
   el.classList.add('active');
-  ({ stats: adminStats, reports: adminReports, users: adminUsers, audit: adminAudit })[tab]();
+  ({ stats: adminStats, reports: adminReports, feedback: adminFeedback, users: adminUsers, audit: adminAudit })[tab]();
 }
 
 function adminBody(html) { var el = document.getElementById('admin-body'); if (el) el.innerHTML = html; }
@@ -80,4 +80,24 @@ function adminAudit() {
         '<div class="friend-status">' + (e.actor ? escapeHtml(e.actor.name) + ' #' + escapeHtml(e.actor.publicId) + ' · ' : '') + escapeHtml(e.ip || '') + ' · ' + new Date(e.at).toLocaleString('pt-BR') + '</div></div></div>';
     }).join('') || '<div class="empty-state">Vazio.</div>');
   }).catch(adminFail);
+}
+
+function adminFeedback() {
+  adminBody('<div class="empty-state">Carregando...</div>');
+  accountApi('/api/admin/feedback').then(function(r) {
+    if (!r.items.length) { adminBody('<div class="empty-state">Nenhum feedback novo.</div>'); return; }
+    var kinds = { bug: 'Problema', idea: 'Sugestão', other: 'Outro' };
+    adminBody(r.items.map(function(f, i) {
+      return '<div class="admin-report"><div><b>' + escapeHtml(kinds[f.kind] || f.kind) + '</b> · ' + escapeHtml(timeAgo(f.at)) +
+        (f.author ? ' · #' + escapeHtml(f.author.publicId) + ' ' + escapeHtml(f.author.name) : ' · visitante') + '</div>' +
+        '<div class="admin-quote" id="fb-' + i + '"></div>' +
+        '<div class="party-muted">' + escapeHtml([f.contact, f.client].filter(Boolean).join(' · ')) + '</div>' +
+        '<div class="mini-actions"><button class="mini-btn" onclick="adminFeedbackDone(\'' + safeId(f.id) + '\')">Resolvido</button></div></div>';
+    }).join(''));
+    r.items.forEach(function(f, i) { document.getElementById('fb-' + i).textContent = f.text; });
+  }).catch(adminFail);
+}
+
+function adminFeedbackDone(id) {
+  accountApi('/api/admin/feedback/' + id + '/done', 'POST', {}).then(adminFeedback).catch(function(e) { showToast(e.message); });
 }
