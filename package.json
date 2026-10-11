@@ -1,7 +1,7 @@
 {
   "name": "anime-hub",
   "version": "1.0.0",
-  "description": "AnimeHub: API server and PWA",
+  "description": "AnimeZera: API server and PWA",
   "main": "server.js",
   "directories": {
     "doc": "docs"

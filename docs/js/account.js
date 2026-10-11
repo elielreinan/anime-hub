@@ -393,7 +393,7 @@ function copyText(text, msg) {
 function shareProfile() {
   if (!account) return;
   var link = profileLink(account.user.publicId);
-  if (navigator.share) { navigator.share({ title: 'AnimeHub', text: 'Meu perfil no AnimeHub (ID #' + account.user.publicId + ')', url: link }).catch(function() {}); return; }
+  if (navigator.share) { navigator.share({ title: 'AnimeZera', text: 'Meu perfil no AnimeZera (ID #' + account.user.publicId + ')', url: link }).catch(function() {}); return; }
   copyText(link, 'Link do perfil copiado');
 }
 
@@ -621,7 +621,7 @@ function showFriendWatching(f) {
   };
   el.classList.add('show');
   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-    try { new Notification(f.name + ' está assistindo ' + f.watching.title, { body: 'Abra o AnimeHub para assistir junto', icon: 'icon-192.png' }); } catch (e) {}
+    try { new Notification(f.name + ' está assistindo ' + f.watching.title, { body: 'Abra o AnimeZera para assistir junto', icon: 'icon-192.png' }); } catch (e) {}
   }
 }
 function stopInboxPolling() { clearInterval(inboxTimer); clearInterval(friendWatchTimer); inboxTimer = friendWatchTimer = null; friendWatchSeen = null; }
@@ -638,7 +638,7 @@ function checkInbox() {
       setNotifications(list.slice(0, 50));
       updateNotifBadge();
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-        try { new Notification(inv.from + ' te chamou no AnimeHub', { body: 'Toque para entrar na sala ' + inv.code, icon: 'icon-192.png' }); } catch (e) {}
+        try { new Notification(inv.from + ' te chamou no AnimeZera', { body: 'Toque para entrar na sala ' + inv.code, icon: 'icon-192.png' }); } catch (e) {}
       }
     });
     showNextInvite();

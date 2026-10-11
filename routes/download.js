@@ -24,7 +24,7 @@ function handleDownload(req, res) {
   getApk().then(function(body) {
     res.writeHead(200, {
       'Content-Type': 'application/vnd.android.package-archive',
-      'Content-Disposition': 'attachment; filename="AnimeHub.apk"',
+      'Content-Disposition': 'attachment; filename="AnimeZera.apk"',
       'Content-Length': body.length,
       'Cache-Control': 'public, max-age=600'
     });

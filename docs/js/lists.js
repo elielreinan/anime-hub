@@ -93,7 +93,7 @@ function openPublicList(id) {
 
 function shareList(id) {
   var link = listLink(id);
-  if (navigator.share) { navigator.share({ title: 'AnimeHub', text: 'Olha essa lista de animes', url: link }).catch(function() {}); return; }
+  if (navigator.share) { navigator.share({ title: 'AnimeZera', text: 'Olha essa lista de animes', url: link }).catch(function() {}); return; }
   copyText(link, 'Link da lista copiado');
 }
 

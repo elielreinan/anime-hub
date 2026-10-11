@@ -1,4 +1,4 @@
-// AnimeHub API + static site.
+// AnimeZera API + static site.
 // lib/      shared helpers (config, http, outbound requests, db, auth, security)
 // sources/  video scrapers (DooPlay sites)
 // routes/   one module per API area
@@ -117,7 +117,7 @@ module.exports = { DOOPLAY_SITES: dooplay.DOOPLAY_SITES, findEpisodeEmbeds: doop
 if (require.main === module) {
   db.init();
   server.listen(PORT, function() {
-    console.log('AnimeHub server running at http://localhost:' + PORT);
+    console.log('AnimeZera server running at http://localhost:' + PORT);
     console.log('Video sources: ' + dooplay.DOOPLAY_SITES.map(function(s) { return s.name; }).join(', '));
     console.log('Accounts: ' + (db.enabled() ? 'on' : 'off (no DATABASE_URL)'));
   });

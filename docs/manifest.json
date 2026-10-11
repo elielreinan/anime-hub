@@ -1,6 +1,6 @@
 {
-  "name": "Anime Hub",
-  "short_name": "AnimeHub",
+  "name": "AnimeZera",
+  "short_name": "AnimeZera",
   "start_url": "/anime-hub/",
   "scope": "/anime-hub/",
   "display": "standalone",
