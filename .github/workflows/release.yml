@@ -1,0 +1,38 @@
+name: release
+
+# Manual: Actions > release > Run workflow. Tags the chosen commit and publishes a GitHub release.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag (e.g. alpha-0.0.1)'
+        required: true
+      title:
+        description: 'Release title (e.g. Alpha 0.0.1)'
+        required: true
+      ref:
+        description: 'Branch or commit to release'
+        required: false
+        default: master
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+          PRE: ${{ inputs.prerelease }}
+        run: |
+          gh release create "$TAG" --target "$(git rev-parse HEAD)" --title "$TITLE" --generate-notes $([ "$PRE" = true ] && echo --prerelease)
