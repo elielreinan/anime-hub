@@ -289,7 +289,7 @@ function resolvePlayer(url, site) {
   if (host.indexOf('filemoon') !== -1) {
     return embedAlive(url).then(function(ok) { return ok ? { kind: 'iframe', url: url, name: 'Filemoon (externo)', rank: 7 } : null; });
   }
-  return resolveGeneric(url, site).then(function(res) {
+  return resolveGeneric(url, site).then(/** @returns {any} */ function(res) {
     if (!res) return null;
     if (res.media.length) {
       return Promise.all(res.media.map(function(m, i) {

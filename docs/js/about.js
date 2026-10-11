@@ -1,10 +1,10 @@
-// ── Sobre: what AnimeHub is (and isn't) ──
+// ── Sobre: what AnimeZera is (and isn't) ──
 function openAbout() {
-  openGenericSheet('Sobre o AnimeHub', '<div class="about">' +
+  openGenericSheet('Sobre o AnimeZera', '<div class="about">' +
     '<div class="about-logo"><span class="logo-accent">ANIME</span>HUB</div>' +
-    '<p>O AnimeHub é um app gratuito para descobrir e assistir animes, feito para ser simples, rápido e bom de usar no celular.</p>' +
+    '<p>O AnimeZera é um app gratuito para descobrir e assistir animes, feito para ser simples, rápido e bom de usar no celular.</p>' +
     '<h3>Não hospedamos nenhum anime</h3>' +
-    '<p>Nenhum vídeo fica nos nossos servidores. O AnimeHub funciona como um <b>roteador</b>: organiza catálogo, episódios e agenda e direciona o player para fontes públicas que já existem na internet. ' +
+    '<p>Nenhum vídeo fica nos nossos servidores. O AnimeZera funciona como um <b>roteador</b>: organiza catálogo, episódios e agenda e direciona o player para fontes públicas que já existem na internet. ' +
     'Nós não enviamos, armazenamos nem controlamos esse conteúdo.</p>' +
     '<p>Se você é dono de algum conteúdo e quer que ele deixe de aparecer aqui, fale com a gente pelo <a href="#" onclick="closeGenericSheet(); openFeedback(); return false;">feedback</a> que removemos o acesso.</p>' +
     '<h3>O que é nosso</h3>' +

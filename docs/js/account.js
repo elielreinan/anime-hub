@@ -393,7 +393,7 @@ function copyText(text, msg) {
 function shareProfile() {
   if (!account) return;
   var link = profileLink(account.user.publicId);
-  if (navigator.share) { navigator.share({ title: 'AnimeHub', text: 'Meu perfil no AnimeHub (ID #' + account.user.publicId + ')', url: link }).catch(function() {}); return; }
+  if (navigator.share) { navigator.share({ title: 'AnimeZera', text: 'Meu perfil no AnimeZera (ID #' + account.user.publicId + ')', url: link }).catch(function() {}); return; }
   copyText(link, 'Link do perfil copiado');
 }
 
@@ -621,7 +621,7 @@ function showFriendWatching(f) {
   };
   el.classList.add('show');
   if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-    try { new Notification(f.name + ' está assistindo ' + f.watching.title, { body: 'Abra o AnimeHub para assistir junto', icon: 'icon-192.png' }); } catch (e) {}
+    try { new Notification(f.name + ' está assistindo ' + f.watching.title, { body: 'Abra o AnimeZera para assistir junto', icon: 'icon-192.png' }); } catch (e) {}
   }
 }
 function stopInboxPolling() { clearInterval(inboxTimer); clearInterval(friendWatchTimer); inboxTimer = friendWatchTimer = null; friendWatchSeen = null; }
@@ -638,7 +638,7 @@ function checkInbox() {
       setNotifications(list.slice(0, 50));
       updateNotifBadge();
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-        try { new Notification(inv.from + ' te chamou no AnimeHub', { body: 'Toque para entrar na sala ' + inv.code, icon: 'icon-192.png' }); } catch (e) {}
+        try { new Notification(inv.from + ' te chamou no AnimeZera', { body: 'Toque para entrar na sala ' + inv.code, icon: 'icon-192.png' }); } catch (e) {}
       }
     });
     showNextInvite();
@@ -665,3 +665,20 @@ document.addEventListener('visibilitychange', function() {
   if (!document.hidden && account) { pullAccount(); checkInbox(); }
   if (document.hidden && syncDirty) pushAccountData();
 });
+
+// Signed out: after a while browsing, invite once to create an account (then at most every 3 days).
+// Waits while a video plays or another window is open, and stays quiet in background tabs.
+var AUTH_NUDGE_AFTER = 90 * 1000, AUTH_NUDGE_EVERY = 3 * 24 * 3600 * 1000;
+var authNudgeUsed = 0;
+setInterval(function() {
+  if (account || document.hidden) return;
+  authNudgeUsed += 5000;
+  if (authNudgeUsed < AUTH_NUDGE_AFTER) return;
+  var last = 0;
+  try { last = +localStorage.getItem('ah_auth_nudge') || 0; } catch (e) {}
+  if (Date.now() - last < AUTH_NUDGE_EVERY) { authNudgeUsed = -Infinity; return; }
+  if (playerIsOpen() || document.querySelector('.show[role="dialog"], .show[id$="-sheet"], .show[class*="sheet"], #invite-banner.show')) return;
+  try { localStorage.setItem('ah_auth_nudge', String(Date.now())); } catch (e) {}
+  authNudgeUsed = -Infinity;
+  openAuth('register');
+}, 5000);

@@ -34,6 +34,8 @@ jobs:
       - name: Undefined names (server)
         run: |
           npx --yes eslint@8 --no-eslintrc --env node,es2022 --parser-options ecmaVersion:2022 --rule '{"no-undef":"error","no-dupe-keys":"error","no-unreachable":"error"}' server.js lib routes sources
+      - name: Typecheck
+        run: npm run typecheck
       - name: Vulnerable dependencies
         run: npm audit --omit=dev --audit-level=high
       - name: API end-to-end

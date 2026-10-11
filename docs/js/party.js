@@ -378,8 +378,8 @@ function renderPartyPanel() {
 function shareParty() {
   if (!party) return;
   var link = location.origin + location.pathname + '?party=' + party.code;
-  var text = 'Bora assistir anime junto no AnimeHub? Entra na sala ' + party.code;
-  if (navigator.share) { navigator.share({ title: 'AnimeHub', text: text, url: link }).catch(function() {}); return; }
+  var text = 'Bora assistir anime junto no AnimeZera? Entra na sala ' + party.code;
+  if (navigator.share) { navigator.share({ title: 'AnimeZera', text: text, url: link }).catch(function() {}); return; }
   if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('Link da sala copiado'); }, function() { prompt('Copie o link da sala:', link); });
   else prompt('Copie o link da sala:', link);
 }

@@ -71,8 +71,8 @@ function openTransfer() { openSheet('transfer-sheet'); }
 function shareTransferLink() {
   encodeUserData(collectUserData()).then(function(code) {
     var link = location.origin + location.pathname + '#import=' + code;
-    var text = 'Meus dados do AnimeHub: abra este link no outro aparelho';
-    if (navigator.share) { navigator.share({ title: 'AnimeHub', text: text, url: link }).catch(function() {}); return; }
+    var text = 'Meus dados do AnimeZera: abra este link no outro aparelho';
+    if (navigator.share) { navigator.share({ title: 'AnimeZera', text: text, url: link }).catch(function() {}); return; }
     if (navigator.clipboard) navigator.clipboard.writeText(link).then(function() { showToast('Link copiado: abra no outro aparelho'); }, function() { prompt('Copie o link:', link); });
     else prompt('Copie o link:', link);
   }).catch(function() { showToast('Não foi possível gerar o link'); });
