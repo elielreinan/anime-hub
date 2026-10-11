@@ -130,7 +130,9 @@ Promise.all([
   document.getElementById('popular').innerHTML = populares.slice(0, 15).map(createPosterCard).join('');
   document.getElementById('seasonal').innerHTML = dublados.slice(0, 15).map(createPosterCard).join('');
   document.getElementById('top-rated').innerHTML = populares.slice(15, 30).map(createPosterCard).join('');
+  hideSplash();
 }).catch(function(e) {
+  hideSplash();
   console.error('AnimeTV fetch error:', e);
   ['trending','popular','seasonal','top-rated'].forEach(function(id) {
     document.getElementById(id).innerHTML = '<div style="padding:20px;color:var(--muted)">Erro ao carregar. Verifique sua conexão.</div>';

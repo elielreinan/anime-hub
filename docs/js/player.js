@@ -206,6 +206,18 @@ function playStream(e, viaProxy) {
       if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRetries++ < 1) { hls.recoverMediaError(); return; }
       fail();
     });
+    // Servers with a separate subtitle track (not burned in): hls.js leaves it off unless the
+    // playlist marks it default, so turn on the Portuguese one (or the first) ourselves.
+    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, function(ev, data) {
+      var tracks = data.subtitleTracks || [];
+      if (!tracks.length || hls.subtitleTrack !== -1) return;
+      var pick = 0;
+      for (var i = 0; i < tracks.length; i++) {
+        if (/^pt|portug/i.test((tracks[i].lang || '') + ' ' + (tracks[i].name || ''))) { pick = i; break; }
+      }
+      hls.subtitleDisplay = true;
+      hls.subtitleTrack = pick;
+    });
     hls.loadSource(src);
     hls.attachMedia(videoEl);
   } else if (e.kind === 'hls' && !videoEl.canPlayType('application/vnd.apple.mpegurl')) {
