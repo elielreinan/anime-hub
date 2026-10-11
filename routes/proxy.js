@@ -100,7 +100,7 @@ function handleStreamProxy(req, urlObj, res) {
     res.writeHead(proxyRes.statusCode, respHeaders);
     proxyRes.pipe(res);
   });
-  proxyReq.on('error', function(err) {
+  proxyReq.on('error', function(/** @type {NodeJS.ErrnoException} */ err) {
     try { res.writeHead(err.code === 'EBLOCKED' ? 400 : 502); res.end('Proxy error'); } catch (e) { /* already sent */ }
   });
   proxyReq.setTimeout(60000, function() { proxyReq.destroy(); });

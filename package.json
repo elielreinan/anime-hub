@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test:api": "node scripts/api-test.js"
+    "test:api": "node scripts/api-test.js",
+    "typecheck": "tsc -p ."
   },
   "repository": {
     "type": "git",
@@ -28,7 +29,9 @@
   "devDependencies": {
     "@capacitor/android": "^8.5.2",
     "@capacitor/cli": "^8.5.2",
-    "@capacitor/core": "^8.5.2"
+    "@capacitor/core": "^8.5.2",
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=20"
